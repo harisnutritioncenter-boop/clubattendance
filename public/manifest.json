@@ -1,0 +1,16 @@
+{
+  "name": "Healthy Cafe App",
+  "short_name": "Healthy Cafe",
+  "description": "Internal CRM and Ledger System for Healthy Cafe",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "icons": [
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
