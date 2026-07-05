@@ -2,8 +2,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Customer } from '../types/customer.types';
 import { CustomerMembershipStatus } from '@/features/memberships/types/membership.types';
 import { Button } from '@/components/ui/button';
-import { CalendarHeart, ClipboardList, MapPin, Phone, UserCircle, Target, FileText, AlertTriangle } from 'lucide-react';
+import { CalendarHeart, ClipboardList, MapPin, Phone, UserCircle, Target, FileText, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
 
 interface CustomerDetailsModalProps {
   customer: Customer | null;
@@ -12,6 +13,9 @@ interface CustomerDetailsModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onAssignPlanClick: () => void;
+  onEditClick?: () => void;
+  onCollectDebtClick?: () => void;
+  onArchiveClick?: () => void;
 }
 
 export function CustomerDetailsModal({
@@ -20,8 +24,13 @@ export function CustomerDetailsModal({
   partnerName,
   isOpen,
   onOpenChange,
-  onAssignPlanClick
+  onAssignPlanClick,
+  onEditClick,
+  onCollectDebtClick,
+  onArchiveClick
 }: CustomerDetailsModalProps) {
+  const router = useRouter();
+
   if (!customer) return null;
 
   const isExpired = balance?.isExpired;
@@ -92,6 +101,12 @@ export function CustomerDetailsModal({
                   <span className="font-medium">Assigned Junior Partner:</span>
                   <span className="font-semibold text-primary">{partnerName || 'None'}</span>
                 </div>
+                {balance?.latestPlanName && (
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="font-medium">Active Plan:</span>
+                    <span className="font-semibold text-primary">{balance.latestPlanName}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-1">
                   <span className="font-medium">Plan Expiry:</span>
                   <span className={isExpired ? 'text-destructive font-bold' : ''}>{expiryText}</span>
@@ -106,6 +121,19 @@ export function CustomerDetailsModal({
                   <span>Total Consumed:</span>
                   <span>{balance?.totalShakesConsumed || 0}</span>
                 </div>
+                {balance && balance.remainingBalance > 0 && (
+                  <div className="flex justify-between items-center mt-2 p-2 bg-orange-100 dark:bg-orange-900/30 rounded-md">
+                    <div>
+                      <span className="font-semibold text-orange-700 dark:text-orange-400">Due Balance:</span>
+                      <span className="font-bold text-orange-700 dark:text-orange-400 ml-2">₹{balance.remainingBalance}</span>
+                    </div>
+                    {onCollectDebtClick && (
+                      <Button size="sm" variant="outline" className="bg-orange-50 hover:bg-orange-200 border-orange-200 text-orange-700 dark:bg-orange-900/50 dark:hover:bg-orange-800 dark:border-orange-800 dark:text-orange-300 h-7 text-xs" onClick={onCollectDebtClick}>
+                        Collect
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -119,13 +147,33 @@ export function CustomerDetailsModal({
           </div>
         )}
 
-        <DialogFooter className="mt-4 flex flex-row gap-3 w-full">
-          <Button variant="outline" className="w-full flex-1" onClick={() => onOpenChange(false)}>
-            Close
+        <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-3 w-full">
+          <Button 
+            className="w-full sm:w-auto"
+            onClick={() => {
+              onOpenChange(false);
+              router.push(`/customers/${customer.id}`);
+            }}
+          >
+            <ExternalLink className="h-4 w-4 mr-2" /> View Full Profile
           </Button>
-          <Button className="w-full flex-1 gap-2" onClick={onAssignPlanClick}>
-            <ClipboardList className="h-4 w-4" /> Assign Plan
-          </Button>
+          
+          <div className="flex gap-2 w-full sm:w-auto flex-1 justify-end flex-wrap">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+            <Button variant="secondary" onClick={onEditClick}>
+              Edit
+            </Button>
+            {onArchiveClick && (
+              <Button variant="destructive" onClick={onArchiveClick}>
+                Archive
+              </Button>
+            )}
+            <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={onAssignPlanClick}>
+              <ClipboardList className="h-4 w-4" /> Assign Plan
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -36,11 +36,13 @@ interface Club {
   name: string;
 }
 
+import { PartnerInventoryModal } from '@/features/partners/components/partner-inventory-modal';
+import { ManageShakesModal } from '@/features/partners/components/add-shakes-modal';
+
 function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Club[], onUpdate: () => void }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [addAmount, setAddAmount] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLogOpen, setIsLogOpen] = useState(false);
   const user = useAuthStore(state => state.user);
   
   const [isClubAssignOpen, setIsClubAssignOpen] = useState(false);
@@ -57,29 +59,6 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
   useEffect(() => {
     fetchBalance();
   }, [partner.id]);
-
-  const handleAddShakes = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    try {
-      setIsSubmitting(true);
-      const amount = parseInt(addAmount);
-      if (isNaN(amount) || amount <= 0) {
-        toast.error("Please enter a valid positive number.");
-        return;
-      }
-      
-      await PartnerInventoryService.addShakes(partner.id, amount, user.uid);
-      setAddAmount('');
-      setIsAssignOpen(false);
-      fetchBalance();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(`Failed to assign shakes: ${err.message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleAssignClub = async () => {
     if (!selectedClubId) return;
@@ -100,115 +79,111 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
   const clubName = clubs.find(c => c.id === partner.clubId)?.name;
 
   return (
-    <TableRow>
-      <TableCell className="font-medium">{partner.name || '-'}</TableCell>
-      <TableCell>{partner.email}</TableCell>
-      <TableCell className="capitalize">{partner.role === 'club_owner' ? 'Club Owner' : partner.role.replace('_', ' ')}</TableCell>
-      <TableCell>
-        {clubName ? (
-          <div className="flex items-center gap-2 group">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span>{clubName}</span>
-            {partner.role !== 'super_admin' && (
-              <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
-                <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary opacity-0 group-hover:opacity-100 transition-opacity ml-2 h-6 px-2" />}>
-                  Change
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Re-assign Club for {partner.name}</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 pt-4">
-                    <Select value={selectedClubId} onValueChange={(v) => setSelectedClubId(v || '')}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a club">
-                          {selectedClubId ? clubs.find(c => c.id === selectedClubId)?.name : "Select a club"}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clubs.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button onClick={handleAssignClub} disabled={isAssigningClub} className="w-full">
-                      {isAssigningClub ? 'Assigning...' : 'Confirm Assignment'}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-        ) : partner.role !== 'super_admin' ? (
-          <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
-            <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary" />}>
-              Assign Club
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Assign Club to {partner.name}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <Select value={selectedClubId} onValueChange={(v) => setSelectedClubId(v || '')}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a club">
-                      {selectedClubId ? clubs.find(c => c.id === selectedClubId)?.name : "Select a club"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clubs.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={handleAssignClub} disabled={isAssigningClub} className="w-full">
-                  {isAssigningClub ? 'Assigning...' : 'Confirm Assignment'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        )}
-      </TableCell>
-      <TableCell className="text-right">
-        {partner.role === 'junior_partner' ? (
-          <div className="flex items-center justify-end gap-3">
-            <span className={`font-bold ${balance !== null && balance < 0 ? 'text-destructive' : 'text-primary'}`}>
-              {balance !== null ? `${balance} Shakes` : '...'}
-            </span>
-            <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
-              <DialogTrigger render={<Button size="sm" variant="outline" className="gap-2" />}>
-                <PackagePlus className="h-4 w-4" /> Add Shakes
+    <>
+      <TableRow>
+        <TableCell className="font-medium">{partner.name || '-'}</TableCell>
+        <TableCell>{partner.email}</TableCell>
+        <TableCell className="capitalize">{partner.role === 'club_owner' ? 'Club Owner' : partner.role.replace('_', ' ')}</TableCell>
+        <TableCell>
+          {clubName ? (
+            <div className="flex items-center gap-2 group">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span>{clubName}</span>
+              {partner.role !== 'super_admin' && (
+                <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
+                  <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary opacity-0 group-hover:opacity-100 transition-opacity ml-2 h-6 px-2" />}>
+                    Change
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Re-assign Club for {partner.name}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <Select value={selectedClubId} onValueChange={(v) => setSelectedClubId(v || '')}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a club">
+                            {selectedClubId ? clubs.find(c => c.id === selectedClubId)?.name : "Select a club"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clubs.map(c => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button onClick={handleAssignClub} disabled={isAssigningClub} className="w-full">
+                        {isAssigningClub ? 'Assigning...' : 'Confirm Assignment'}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          ) : partner.role !== 'super_admin' ? (
+            <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
+              <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary" />}>
+                Assign Club
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Assign Shakes to {partner.name || 'Partner'}</DialogTitle>
+                  <DialogTitle>Assign Club to {partner.name}</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleAddShakes} className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label>Number of Shakes</Label>
-                    <Input 
-                      type="number" 
-                      min="1" 
-                      required 
-                      value={addAmount} 
-                      onChange={e => setAddAmount(e.target.value)} 
-                      placeholder="e.g. 300" 
-                    />
-                  </div>
-                  <Button type="submit" className="w-full mt-4" disabled={isSubmitting}>
-                    {isSubmitting ? 'Assigning...' : 'Assign Shakes'}
+                <div className="space-y-4 pt-4">
+                  <Select value={selectedClubId} onValueChange={(v) => setSelectedClubId(v || '')}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a club">
+                        {selectedClubId ? clubs.find(c => c.id === selectedClubId)?.name : "Select a club"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clubs.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={handleAssignClub} disabled={isAssigningClub} className="w-full">
+                    {isAssigningClub ? 'Assigning...' : 'Confirm Assignment'}
                   </Button>
-                </form>
+                </div>
               </DialogContent>
             </Dialog>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        )}
-      </TableCell>
-    </TableRow>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </TableCell>
+        <TableCell className="text-right">
+          {partner.role === 'junior_partner' ? (
+            <div className="flex items-center justify-end gap-3">
+              <span className={`font-bold ${balance !== null && balance < 0 ? 'text-destructive' : 'text-primary'}`}>
+                {balance !== null ? `${balance} Shakes` : '...'}
+              </span>
+              <Button size="sm" variant="outline" onClick={() => setIsLogOpen(true)}>
+                Log
+              </Button>
+              <Button size="sm" variant="default" className="gap-2" onClick={() => setIsAssignOpen(true)}>
+                <PackagePlus className="h-4 w-4" /> Manage Shakes
+              </Button>
+            </div>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </TableCell>
+      </TableRow>
+      <PartnerInventoryModal 
+        partnerId={partner.id}
+        partnerName={partner.name || partner.email || 'Partner'}
+        isOpen={isLogOpen}
+        onOpenChange={setIsLogOpen}
+        onUpdate={fetchBalance}
+      />
+      <ManageShakesModal 
+        partnerId={partner.id}
+        partnerName={partner.name || partner.email || 'Partner'}
+        isOpen={isAssignOpen}
+        onOpenChange={setIsAssignOpen}
+        onSuccess={fetchBalance}
+      />
+    </>
   );
 }
 

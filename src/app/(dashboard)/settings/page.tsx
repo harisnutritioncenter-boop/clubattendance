@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, Bell, Settings2, ShieldCheck } from 'lucide-react';
+import { Building2, Bell, Settings2, ShieldCheck, ArchiveRestore } from 'lucide-react';
 import { useState } from 'react';
+import { ArchiveDashboard } from '@/features/settings/components/archive-dashboard';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
@@ -34,6 +35,13 @@ export default function SettingsPage() {
             onClick={() => setActiveTab('branch')}
           >
             <Building2 className="w-4 h-4" /> Branch Info
+          </Button>
+          <Button 
+            variant={activeTab === 'archive' ? 'default' : 'ghost'} 
+            className="justify-start gap-2"
+            onClick={() => setActiveTab('archive')}
+          >
+            <ArchiveRestore className="w-4 h-4" /> Archive & Recovery
           </Button>
           {/* <Button 
             variant={activeTab === 'notifications' ? 'default' : 'ghost'} 
@@ -156,6 +164,9 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           )} */}
+          {activeTab === 'archive' && (
+            <ArchiveDashboard />
+          )}
         </div>
       </div>
     </div>

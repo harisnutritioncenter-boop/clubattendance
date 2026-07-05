@@ -19,12 +19,17 @@ import { FamilyGroup } from '@/features/family/types/family.types';
 import { Customer } from '@/features/customers/types/customer.types';
 import { Combobox } from '@/components/ui/combobox';
 import Link from 'next/link';
+import { FamilyEditModal } from '@/features/family/components/family-edit-modal';
+import { Settings2 } from 'lucide-react';
 
 export default function FamilyPage() {
   const [families, setFamilies] = useState<FamilyGroup[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedFamily, setSelectedFamily] = useState<FamilyGroup | null>(null);
 
   const branchId = useBranchStore(state => state.activeBranchId);
   const user = useAuthStore(state => state.user);
@@ -73,7 +78,7 @@ export default function FamilyPage() {
         memberIds: validMembers,
         branchId: bId,
         createdBy: user.uid
-      });
+      }, user.uid, bId);
       setOpen(false);
       setPrimaryCustomerId('');
       setMemberIds(['']);
@@ -168,9 +173,20 @@ export default function FamilyPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {families.map((family) => (
-            <Card key={family.id}>
+            <Card key={family.id} className="relative group">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => {
+                  setSelectedFamily(family);
+                  setEditModalOpen(true);
+                }}
+              >
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
               <CardHeader>
-                <CardTitle className="text-xl">Family of {getCustomerName(family.primaryCustomerId)}</CardTitle>
+                <CardTitle className="text-xl pr-8">Family of {getCustomerName(family.primaryCustomerId)}</CardTitle>
                 <CardDescription>Primary account pays for shakes</CardDescription>
               </CardHeader>
               <CardContent>
@@ -191,6 +207,14 @@ export default function FamilyPage() {
           )}
         </div>
       )}
+
+      <FamilyEditModal 
+        family={selectedFamily}
+        customers={customers}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        onSuccess={loadData}
+      />
     </div>
   );
 }

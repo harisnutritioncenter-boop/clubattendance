@@ -26,7 +26,7 @@ export default function CustomersPage() {
             <Plus className="mr-2 h-4 w-4" />
             Add Customer
           </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add Existing Customer</DialogTitle>
                 <DialogDescription>

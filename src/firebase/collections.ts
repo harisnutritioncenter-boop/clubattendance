@@ -22,4 +22,5 @@ export const COLLECTIONS = {
   NOTIFICATIONS: createCollection('notifications'),
   SETTINGS: createCollection('settings'),
   PARTNER_INVENTORY_LEDGER: createCollection('partnerInventoryLedger'),
+  ACTIVITY_LOGS: createCollection('activityLogs'),
 } as const;

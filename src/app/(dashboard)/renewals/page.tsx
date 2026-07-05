@@ -7,11 +7,15 @@ import { useBranchStore, useAuthStore } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { AssignMembershipModal } from '@/features/memberships/components/assign-membership-modal';
 
 export default function RenewalsPage() {
   const branchId = useBranchStore(state => state.activeBranchId);
   const [loading, setLoading] = useState(true);
   const [expiring, setExpiring] = useState<any[]>([]);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<{id: string, name: string} | null>(null);
 
   useEffect(() => {
     const fetchRenewals = async () => {
@@ -81,6 +85,7 @@ export default function RenewalsPage() {
                   <TableHead>Current Plan</TableHead>
                   <TableHead className="text-right">Remaining Shakes</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -101,6 +106,17 @@ export default function RenewalsPage() {
                         </Badge>
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        size="sm" 
+                        onClick={() => {
+                          setSelectedCustomer({ id: c.id, name: c.name });
+                          setAssignModalOpen(true);
+                        }}
+                      >
+                        Renew Now
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -108,6 +124,18 @@ export default function RenewalsPage() {
           )}
         </CardContent>
       </Card>
+
+      {selectedCustomer && (
+        <AssignMembershipModal
+          open={assignModalOpen}
+          onOpenChange={setAssignModalOpen}
+          customerId={selectedCustomer.id}
+          customerName={selectedCustomer.name}
+          onSuccess={() => {
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export interface Customer {
   trialConvertedAt?: number;
   juniorPartnerId?: string;
   reference?: string;
+  birthDate?: number;
+  
   
   // Ledger/Membership derived fields (virtual/not stored)
   // We can add them later when joining with ledger data

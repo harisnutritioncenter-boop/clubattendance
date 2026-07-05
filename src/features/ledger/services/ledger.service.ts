@@ -1,26 +1,57 @@
-import { addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { addDoc, getDocs, query, where, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
+import { cleanPayload } from '@/lib/utils';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '../types/ledger.types';
 import { CustomerMembershipStatus } from '@/features/memberships/types/membership.types';
 import { FamilyService } from '@/features/family/services/family.service';
 import { CustomerService } from '@/features/customers/services/customer.service';
 import { PartnerInventoryService } from '@/features/partners/services/partner-inventory.service';
+import { ActivityLogsService } from '@/features/activity-logs/services/activity.service';
 
 export class LedgerService {
   
   static async addPayment(
-    data: Omit<PaymentLedgerEntry, 'id' | 'createdAt' | 'isArchived'>
+    data: Omit<PaymentLedgerEntry, 'id' | 'createdAt' | 'isArchived'> & { createdAt?: number }
   ): Promise<string> {
-    const newDoc = await addDoc(COLLECTIONS.PAYMENT_LEDGER, {
+    const newDoc = await addDoc(COLLECTIONS.PAYMENT_LEDGER, cleanPayload({
       ...data,
-      createdAt: Date.now(),
+      createdAt: data.createdAt || Date.now(),
       isArchived: false,
-    });
+    }));
+    
+    let actionType: 'PURCHASE' | 'COLLECT_DEBT' | 'ADD_SHAKES' | 'DEDUCT_SHAKES' = 'PURCHASE';
+    let details = `Payment of ₹${data.amount} via ${data.paymentMethod}`;
+    
+    if (data.type === 'Debt Collection') {
+      actionType = 'COLLECT_DEBT';
+      details = `Collected debt of ₹${data.amount} via ${data.paymentMethod}`;
+    } else if (data.type === 'Membership') {
+      actionType = 'PURCHASE';
+      details = `Purchased membership ${data.planName || ''} for ₹${data.amount}`;
+    } else if (data.type === 'Other' && data.notes?.includes('Manual Adjustment')) {
+      if ((data.shakesAdded || 0) < 0) {
+        actionType = 'DEDUCT_SHAKES';
+        details = `Deducted ${Math.abs(data.shakesAdded || 0)} shakes`;
+      } else {
+        actionType = 'ADD_SHAKES';
+        details = `Added ${data.shakesAdded || 0} shakes`;
+      }
+    }
+    
+    ActivityLogsService.logActivity(
+      actionType,
+      'Payment',
+      newDoc.id,
+      details,
+      data.createdBy,
+      data.branchId
+    );
+    
     return newDoc.id;
   }
 
   static async addConsumption(
-    data: Omit<ShakeLedgerEntry, 'id' | 'createdAt' | 'isArchived' | 'customerId' | 'consumedBy'>,
+    data: Omit<ShakeLedgerEntry, 'id' | 'createdAt' | 'isArchived' | 'customerId' | 'consumedBy'> & { createdAt?: number },
     actualConsumerId: string
   ): Promise<string> {
     
@@ -34,13 +65,14 @@ export class LedgerService {
     const consumer = await CustomerService.getCustomer(actualConsumerId);
     const consumedByName = consumer?.name || 'Unknown Consumer';
 
-    const newDoc = await addDoc(COLLECTIONS.SHAKE_LEDGER, {
+    const newDoc = await addDoc(COLLECTIONS.SHAKE_LEDGER, cleanPayload({
       ...data,
       customerId: chargeToCustomerId,
       consumedBy: consumedByName,
-      createdAt: Date.now(),
+      juniorPartnerId: consumer?.juniorPartnerId || null,
+      createdAt: data.createdAt || Date.now(),
       isArchived: false,
-    });
+    }));
     
     // 3. Deduct from Junior Partner if assigned
     if (consumer?.juniorPartnerId) {
@@ -51,6 +83,15 @@ export class LedgerService {
         data.createdBy
       );
     }
+    
+    ActivityLogsService.logActivity(
+      'CONSUME',
+      'Consumption',
+      newDoc.id,
+      `Served ${data.shakesDeducted} shake(s) to ${consumedByName}`,
+      data.createdBy,
+      data.branchId
+    );
     
     return newDoc.id;
   }
@@ -85,16 +126,22 @@ export class LedgerService {
     let totalShakesPurchased = 0;
     let validUntil: number | undefined = undefined;
     let latestPlanName: string | undefined = undefined;
+    let totalFinancialBalance = 0;
 
     for (const payment of payments) {
       if (payment.shakesAdded) {
         totalShakesPurchased += payment.shakesAdded;
       }
-      // Determine latest validity. Since they are ordered descending by createdAt, the first membership payment we find is the latest.
+      if (payment.remainingBalance) {
+        totalFinancialBalance += payment.remainingBalance;
+      }
+      // Determine latest plan name and validity
+      if (!latestPlanName && payment.planName) {
+        latestPlanName = payment.planName;
+      }
       if (!validUntil && payment.validityDays) {
         // Validity is calculated from the time of purchase
         validUntil = payment.createdAt + (payment.validityDays * 24 * 60 * 60 * 1000);
-        latestPlanName = payment.planName;
       }
     }
 
@@ -114,7 +161,8 @@ export class LedgerService {
       remainingShakes,
       latestPlanName,
       validUntil,
-      isExpired
+      isExpired,
+      remainingBalance: totalFinancialBalance
     };
   }
 
@@ -177,21 +225,21 @@ export class LedgerService {
       .reduce((total, doc) => total + (doc.amount || 0), 0);
   }
 
-  static async getReportsData(branchId: string, startDate: number, endDate: number) {
-    const paymentsQuery = query(
+  static async getReportsData(branchId: string | null, startDate: number, endDate: number) {
+    const paymentsQuery = branchId ? query(
       COLLECTIONS.PAYMENT_LEDGER,
       where('branchId', '==', branchId)
-    );
+    ) : query(COLLECTIONS.PAYMENT_LEDGER);
     const paymentsSnap = await getDocs(paymentsQuery);
     const payments = paymentsSnap.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as PaymentLedgerEntry))
       .filter(d => !d.isArchived && d.createdAt >= startDate && d.createdAt <= endDate)
       .sort((a, b) => b.createdAt - a.createdAt);
 
-    const consumptionsQuery = query(
+    const consumptionsQuery = branchId ? query(
       COLLECTIONS.SHAKE_LEDGER,
       where('branchId', '==', branchId)
-    );
+    ) : query(COLLECTIONS.SHAKE_LEDGER);
     const consumptionsSnap = await getDocs(consumptionsQuery);
     const consumptions = consumptionsSnap.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry))
@@ -200,4 +248,89 @@ export class LedgerService {
 
     return { payments, consumptions };
   }
+
+  static async voidConsumption(consumptionId: string, voidedBy: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.SHAKE_LEDGER, consumptionId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error('Consumption not found');
+    
+    const data = snap.data() as ShakeLedgerEntry;
+    if (data.isArchived) throw new Error('Consumption is already voided');
+
+    // 1. Mark as archived (this automatically refunds the customer because the balance query ignores archived entries)
+    await updateDoc(docRef, {
+      isArchived: true,
+      updatedAt: Date.now(),
+      voidedBy
+    });
+
+    // 2. Refund the Partner's inventory if we know who served it
+    if (data.juniorPartnerId) {
+      // By adding shakes, we counteract the deduction
+      await PartnerInventoryService.addShakes(
+        data.juniorPartnerId,
+        data.shakesDeducted,
+        voidedBy,
+        `Refund for voided consumption: ${consumptionId}`
+      );
+    }
+  }
+
+  static async voidPayment(paymentId: string, voidedBy: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.PAYMENT_LEDGER, paymentId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error('Payment not found');
+    
+    const data = snap.data() as PaymentLedgerEntry;
+    if (data.isArchived) throw new Error('Payment is already voided');
+
+    // 1. Mark as archived (this automatically voids the validity and shakes because balance query ignores archived entries)
+    await updateDoc(docRef, {
+      isArchived: true,
+      updatedAt: Date.now(),
+      voidedBy
+    });
+  }
+  static async revertConsumption(consumptionId: string, revertedBy: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.SHAKE_LEDGER, consumptionId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error('Consumption not found');
+    
+    const data = snap.data() as ShakeLedgerEntry;
+    if (!data.isArchived) throw new Error('Consumption is not voided');
+
+    // 1. Un-archive
+    await updateDoc(docRef, {
+      isArchived: false,
+      updatedAt: Date.now(),
+      revertedBy
+    });
+
+    // 2. Re-deduct the Partner's inventory
+    if (data.juniorPartnerId) {
+      await PartnerInventoryService.deductShakes(
+        data.juniorPartnerId,
+        data.shakesDeducted,
+        data.customerId,
+        revertedBy,
+        `Re-deduction for reverted void consumption: ${consumptionId}`
+      );
+    }
+  }
+
+  static async revertPayment(paymentId: string, revertedBy: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.PAYMENT_LEDGER, paymentId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) throw new Error('Payment not found');
+    
+    const data = snap.data() as PaymentLedgerEntry;
+    if (!data.isArchived) throw new Error('Payment is not voided');
+
+    await updateDoc(docRef, {
+      isArchived: false,
+      updatedAt: Date.now(),
+      revertedBy
+    });
+  }
 }
+

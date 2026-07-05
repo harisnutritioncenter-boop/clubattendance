@@ -1,5 +1,5 @@
 export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Bank Transfer';
-export type PaymentType = 'Membership' | 'Retail' | 'Other';
+export type PaymentType = 'Membership' | 'Retail' | 'Other' | 'Debt Collection';
 
 export interface PaymentLedgerEntry {
   id: string;
@@ -12,6 +12,8 @@ export interface PaymentLedgerEntry {
   shakesAdded?: number;
   validityDays?: number;
   planName?: string;
+  totalPlanCost?: number;
+  remainingBalance?: number;
 
   branchId: string;
   createdBy: string;
@@ -27,6 +29,7 @@ export interface ShakeLedgerEntry {
   
   shakesDeducted: number; // Usually 1, but could be multiple if buying for friends
   
+  juniorPartnerId?: string; // The partner who served this shake and had inventory deducted
   branchId: string;
   createdBy: string;
   createdAt: number;

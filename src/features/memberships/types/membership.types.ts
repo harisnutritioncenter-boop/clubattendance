@@ -1,3 +1,13 @@
+export interface PlanEditRecord {
+  editedAt: number;
+  editedBy: string;
+  changes: {
+    field: string;
+    oldValue: any;
+    newValue: any;
+  }[];
+}
+
 export interface MembershipPlan {
   id: string;
   name: string;
@@ -5,7 +15,9 @@ export interface MembershipPlan {
   shakesCount: number;
   validityDays: number;
   isActive: boolean;
+  isArchived?: boolean;
   createdAt: number;
+  editHistory?: PlanEditRecord[];
 }
 
 export interface CustomerMembershipStatus {
@@ -19,4 +31,7 @@ export interface CustomerMembershipStatus {
   latestPlanName?: string;
   validUntil?: number; 
   isExpired: boolean;
+  
+  // Total pending payments for partial plans
+  remainingBalance: number;
 }

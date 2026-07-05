@@ -5,13 +5,15 @@ import { CustomerService } from '@/features/customers/services/customer.service'
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { Customer } from '@/features/customers/types/customer.types';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '@/features/ledger/types/ledger.types';
+import { CustomerMembershipStatus } from '@/features/memberships/types/membership.types';
 import { useBranchStore, useAuthStore } from '@/store';
 import { Combobox } from '@/components/ui/combobox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Coffee, Calendar, Receipt } from 'lucide-react';
+import { CreditCard, Coffee, Calendar, Receipt, Banknote } from 'lucide-react';
+import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 
 export default function PaymentsPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -19,10 +21,35 @@ export default function PaymentsPage() {
   
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
   const [consumptions, setConsumptions] = useState<ShakeLedgerEntry[]>([]);
+  const [balance, setBalance] = useState<CustomerMembershipStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'payments' | 'consumptions'>('payments');
+  const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
 
   const branchId = useBranchStore(state => state.activeBranchId);
+
+  const fetchCustomerHistory = async () => {
+    if (!selectedCustomerId) {
+      setPayments([]);
+      setConsumptions([]);
+      setBalance(null);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const data = await LedgerService.getCustomerHistory(selectedCustomerId);
+      setPayments(data.payments);
+      setConsumptions(data.consumptions);
+      
+      const bal = await LedgerService.getCustomerBalance(selectedCustomerId);
+      setBalance(bal);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchCustomers = async () => {
@@ -40,19 +67,7 @@ export default function PaymentsPage() {
   }, [branchId]);
 
   useEffect(() => {
-    if (selectedCustomerId) {
-      setLoading(true);
-      LedgerService.getCustomerHistory(selectedCustomerId)
-        .then(data => {
-          setPayments(data.payments);
-          setConsumptions(data.consumptions);
-        })
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    } else {
-      setPayments([]);
-      setConsumptions([]);
-    }
+    fetchCustomerHistory();
   }, [selectedCustomerId]);
 
   const customerOptions = customers.map(c => ({
@@ -97,6 +112,24 @@ export default function PaymentsPage() {
             </div>
           ) : (
             <div className="flex flex-col h-full">
+              {/* Due Balance Section */}
+              {balance && balance.remainingBalance > 0 && (
+                <div className="bg-destructive/10 text-destructive px-6 py-4 border-b border-destructive/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold text-lg flex items-center gap-2">
+                      <Banknote className="h-5 w-5" /> Due Balance: ₹{balance.remainingBalance}
+                    </p>
+                    <p className="text-sm opacity-80">This customer has an outstanding payment.</p>
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => setIsCollectModalOpen(true)}
+                  >
+                    Collect Payment
+                  </Button>
+                </div>
+              )}
+
               {/* Custom Tabs Header */}
               <div className="flex border-b">
                 <button
@@ -216,6 +249,17 @@ export default function PaymentsPage() {
           )}
         </CardContent>
       </Card>
+
+      {selectedCustomer && balance && balance.remainingBalance > 0 && (
+        <CollectPaymentModal
+          customerId={selectedCustomerId}
+          customerName={selectedCustomer.name}
+          amountDue={balance.remainingBalance}
+          isOpen={isCollectModalOpen}
+          onOpenChange={setIsCollectModalOpen}
+          onSuccess={fetchCustomerHistory}
+        />
+      )}
     </div>
   );
 }

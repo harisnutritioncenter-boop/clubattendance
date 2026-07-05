@@ -21,7 +21,11 @@ export const customerSchema = z.object({
   otherPurposeDescription: z.string().optional(),
   notes: z.string().optional(),
   juniorPartnerId: z.string().optional(),
+  branchId: z.string().optional(),
   reference: z.string().optional(),
+  birthDate: z.string().optional(),
+  assignPlanId: z.string().optional(),
+  paymentMethod: z.enum(['Cash', 'Card', 'UPI', 'Bank Transfer']).optional(),
 }).refine((data) => {
   if (data.purpose.includes('Other') && !data.otherPurposeDescription) {
     return false;

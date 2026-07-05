@@ -3,21 +3,11 @@
 import { useState, useEffect } from 'react';
 import { getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase/collections';
-import { useAuthStore, useBranchStore } from '@/store';
+import { useAuthStore } from '@/store';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Activity, Coffee, CreditCard, UserPlus, Clock } from 'lucide-react';
-
-interface ActivityLog {
-  id: string;
-  type: 'CONSUMPTION' | 'PAYMENT' | 'CUSTOMER_CREATED' | 'TRIAL_CREATED';
-  title: string;
-  description: string;
-  createdAt: number;
-  createdBy: string;
-  branchId: string;
-  metadata?: any;
-}
+import { Activity, Coffee, CreditCard, UserPlus, Clock, Database, CheckSquare, Settings, DollarSign, Edit, UserMinus } from 'lucide-react';
+import { ActivityLog, ActivityAction, EntityType } from '@/features/activity-logs/types/activity.types';
 
 export default function LogsPage() {
   const { role } = useAuthStore();
@@ -25,12 +15,12 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   
   // Lookups
-  const [partners, setPartners] = useState<Record<string, string>>({});
+  const [users, setUsers] = useState<Record<string, string>>({});
   const [clubs, setClubs] = useState<Record<string, string>>({});
   
   // Filters
   const [filterClub, setFilterClub] = useState('ALL');
-  const [filterJp, setFilterJp] = useState('ALL');
+  const [filterUser, setFilterUser] = useState('ALL');
 
   useEffect(() => {
     let isActive = true;
@@ -46,80 +36,20 @@ export default function LogsPage() {
         
         if (!isActive) return;
 
-        const pMap: Record<string, string> = {};
-        usersSnap.docs.forEach(d => { pMap[d.id] = d.data().name || d.data().email });
-        setPartners(pMap);
+        const uMap: Record<string, string> = {};
+        usersSnap.docs.forEach(d => { uMap[d.id] = d.data().name || d.data().email });
+        setUsers(uMap);
         
         const cMap: Record<string, string> = {};
         branchesSnap.docs.forEach(d => { cMap[d.id] = d.data().name });
         setClubs(cMap);
 
-        // Fetch recent activities (limit 100 per collection)
-        const [consSnap, paySnap, custSnap, trialSnap] = await Promise.all([
-          getDocs(query(COLLECTIONS.CONSUMPTIONS, orderBy('createdAt', 'desc'), limit(100))),
-          getDocs(query(COLLECTIONS.PAYMENTS, orderBy('createdAt', 'desc'), limit(100))),
-          getDocs(query(COLLECTIONS.CUSTOMERS, orderBy('createdAt', 'desc'), limit(100))),
-          getDocs(query(COLLECTIONS.TRIALS, orderBy('createdAt', 'desc'), limit(100)))
-        ]);
+        // Fetch recent activities directly from ACTIVITY_LOGS
+        const logsSnap = await getDocs(query(COLLECTIONS.ACTIVITY_LOGS, orderBy('createdAt', 'desc'), limit(300)));
         
         if (!isActive) return;
 
-        const allLogs: ActivityLog[] = [];
-
-        consSnap.docs.forEach(d => {
-          const data = d.data();
-          allLogs.push({
-            id: `cons_${d.id}`,
-            type: 'CONSUMPTION',
-            title: 'Shake Served',
-            description: `Served ${data.shakesDeducted} shake(s) to ${data.consumedBy || 'Customer'}`,
-            createdAt: data.createdAt,
-            createdBy: data.createdBy,
-            branchId: data.branchId,
-          });
-        });
-
-        paySnap.docs.forEach(d => {
-          const data = d.data();
-          allLogs.push({
-            id: `pay_${d.id}`,
-            type: 'PAYMENT',
-            title: `Payment: ${data.type}`,
-            description: `Collected ₹${data.amount} via ${data.paymentMethod}`,
-            createdAt: data.createdAt,
-            createdBy: data.createdBy,
-            branchId: data.branchId,
-          });
-        });
-
-        custSnap.docs.forEach(d => {
-          const data = d.data();
-          allLogs.push({
-            id: `cust_${d.id}`,
-            type: 'CUSTOMER_CREATED',
-            title: 'New Customer Joined',
-            description: `Added ${data.name} (${data.mobile})`,
-            createdAt: data.createdAt,
-            createdBy: data.createdBy,
-            branchId: data.branchId,
-          });
-        });
-        
-        trialSnap.docs.forEach(d => {
-          const data = d.data();
-          allLogs.push({
-            id: `trial_${d.id}`,
-            type: 'TRIAL_CREATED',
-            title: 'New Trial Added',
-            description: `Added trial for ${data.name}`,
-            createdAt: data.createdAt,
-            createdBy: data.createdBy,
-            branchId: data.branchId,
-          });
-        });
-
-        // Sort by newest first
-        allLogs.sort((a, b) => b.createdAt - a.createdAt);
+        const allLogs: ActivityLog[] = logsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActivityLog));
         
         setLogs(allLogs);
       } catch (err) {
@@ -142,19 +72,28 @@ export default function LogsPage() {
     );
   }
 
-  const getIcon = (type: ActivityLog['type']) => {
-    switch (type) {
-      case 'CONSUMPTION': return <Coffee className="h-4 w-4 text-orange-500" />;
-      case 'PAYMENT': return <CreditCard className="h-4 w-4 text-green-500" />;
-      case 'CUSTOMER_CREATED': return <UserPlus className="h-4 w-4 text-blue-500" />;
-      case 'TRIAL_CREATED': return <Activity className="h-4 w-4 text-purple-500" />;
+  const getIcon = (action: ActivityAction) => {
+    switch (action) {
+      case 'CREATE': return <UserPlus className="h-4 w-4 text-blue-500" />;
+      case 'UPDATE': return <Edit className="h-4 w-4 text-blue-400" />;
+      case 'DELETE': return <UserMinus className="h-4 w-4 text-red-500" />;
+      case 'ARCHIVE': return <Database className="h-4 w-4 text-yellow-600" />;
+      case 'CONSUME': return <Coffee className="h-4 w-4 text-orange-500" />;
+      case 'PURCHASE': return <CreditCard className="h-4 w-4 text-green-500" />;
+      case 'COLLECT_DEBT': return <DollarSign className="h-4 w-4 text-green-600" />;
+      case 'ADD_SHAKES': return <Activity className="h-4 w-4 text-teal-500" />;
+      case 'DEDUCT_SHAKES': return <Activity className="h-4 w-4 text-red-400" />;
       default: return <Clock className="h-4 w-4 text-slate-500" />;
     }
+  };
+  
+  const getEntityLabel = (entityType: EntityType) => {
+    return entityType;
   };
 
   const filteredLogs = logs.filter(log => {
     if (filterClub !== 'ALL' && log.branchId !== filterClub) return false;
-    if (filterJp !== 'ALL' && log.createdBy !== filterJp) return false;
+    if (filterUser !== 'ALL' && log.performedBy !== filterUser) return false;
     return true;
   });
 
@@ -190,16 +129,16 @@ export default function LogsPage() {
             </div>
             
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium whitespace-nowrap">Filter JP:</label>
-              <Select value={filterJp} onValueChange={(v) => setFilterJp(v || 'ALL')}>
+              <label className="text-sm font-medium whitespace-nowrap">Filter User:</label>
+              <Select value={filterUser} onValueChange={(v) => setFilterUser(v || 'ALL')}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Partners">
-                    {filterJp === 'ALL' ? 'All Partners' : partners[filterJp] || 'All Partners'}
+                  <SelectValue placeholder="All Users">
+                    {filterUser === 'ALL' ? 'All Users' : users[filterUser] || 'All Users'}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">All Partners</SelectItem>
-                  {Object.entries(partners).map(([id, name]) => (
+                  <SelectItem value="ALL">All Users</SelectItem>
+                  {Object.entries(users).map(([id, name]) => (
                     <SelectItem key={id} value={id}>{name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -219,23 +158,23 @@ export default function LogsPage() {
               {filteredLogs.map(log => (
                 <div key={log.id} className="p-4 hover:bg-muted/50 transition-colors flex gap-4">
                   <div className="mt-1 bg-background border rounded-full p-2 h-fit">
-                    {getIcon(log.type)}
+                    {getIcon(log.action)}
                   </div>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-sm">{log.title}</p>
+                      <p className="font-medium text-sm">{log.action} {getEntityLabel(log.entityType)}</p>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {new Date(log.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground">{log.description}</p>
+                    <p className="text-sm text-muted-foreground">{log.details}</p>
                     <div className="flex items-center gap-3 pt-2">
                       <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-xs font-medium">
-                        Partner: {partners[log.createdBy] || 'Unknown JP'}
+                        User: {log.performedByName || users[log.performedBy] || log.performedBy}
                       </span>
                       <span className="inline-flex items-center rounded-md bg-secondary/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                        Club: {clubs[log.branchId] || 'Unknown Club'}
+                        Club: {clubs[log.branchId || ''] || 'Global/Unknown'}
                       </span>
                     </div>
                   </div>

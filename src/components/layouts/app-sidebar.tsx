@@ -52,11 +52,11 @@ export function AppSidebar() {
     { title: 'Settings', url: '/settings', icon: Settings },
   ];
 
-  if (role === 'super_admin') {
-    // Insert Activity Logs right after Consumption Logs for Super Admins
-    const logsIndex = adminItems.findIndex(i => i.title === 'Consumption Logs');
-    adminItems.splice(logsIndex + 1, 0, { title: 'Activity Logs', url: '/logs', icon: Activity as any });
-  }
+  // if (role === 'super_admin') {
+  //   // Insert Activity Logs right after Consumption Logs for Super Admins
+  //   const logsIndex = adminItems.findIndex(i => i.title === 'Consumption Logs');
+  //   adminItems.splice(logsIndex + 1, 0, { title: 'Activity Logs', url: '/logs', icon: Activity as any });
+  // }
 
   const juniorItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },

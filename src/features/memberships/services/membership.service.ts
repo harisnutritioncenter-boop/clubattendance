@@ -12,18 +12,36 @@ export class MembershipService {
       ...data,
       createdAt: Date.now(),
       isActive: true,
+      isArchived: false,
+      editHistory: []
     });
     return newDoc.id;
   }
 
   static async getActivePlans(): Promise<MembershipPlan[]> {
-    const q = query(
-      COLLECTIONS.MEMBERSHIP_PLANS,
-      where('isActive', '==', true),
-      orderBy('price', 'asc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MembershipPlan));
+    // We fetch all plans and filter in-memory to avoid needing a complex Firebase composite index.
+    // Membership plans are very few in number, so this is highly efficient.
+    const snapshot = await getDocs(COLLECTIONS.MEMBERSHIP_PLANS);
+    const plans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MembershipPlan));
+    
+    return plans
+      .filter(p => p.isActive === true && p.isArchived !== true)
+      .sort((a, b) => (a.price || 0) - (b.price || 0));
+  }
+
+  static async getAllPlans(): Promise<MembershipPlan[]> {
+    // Fetch all plans and filter in-memory to bypass Firebase index requirements
+    const snapshot = await getDocs(COLLECTIONS.MEMBERSHIP_PLANS);
+    const plans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MembershipPlan));
+    
+    return plans
+      .filter(p => p.isArchived !== true)
+      .sort((a, b) => (a.price || 0) - (b.price || 0));
+  }
+
+  static async updatePlan(id: string, updates: Partial<MembershipPlan>): Promise<void> {
+    const docRef = doc(COLLECTIONS.MEMBERSHIP_PLANS, id);
+    await updateDoc(docRef, updates);
   }
 
   // Assign a membership to a customer = Add a Payment Ledger Entry
@@ -32,17 +50,23 @@ export class MembershipService {
     planId: string, 
     paymentMethod: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer',
     branchId: string,
-    createdBy: string
+    createdBy: string,
+    amountPaid?: number
   ): Promise<string> {
     // 1. Fetch the plan details
     const planDoc = await getDoc(doc(COLLECTIONS.MEMBERSHIP_PLANS, planId));
     if (!planDoc.exists()) throw new Error('Plan not found');
     const plan = planDoc.data() as MembershipPlan;
 
+    const finalAmountPaid = amountPaid !== undefined ? amountPaid : plan.price;
+    const remainingBalance = plan.price - finalAmountPaid;
+
     // 2. Add to payment ledger
     const ledgerEntry = {
       customerId,
-      amount: plan.price,
+      amount: finalAmountPaid,
+      totalPlanCost: plan.price,
+      remainingBalance: remainingBalance,
       paymentMethod,
       type: 'Membership' as const,
       shakesAdded: plan.shakesCount,
@@ -50,7 +74,7 @@ export class MembershipService {
       planName: plan.name,
       branchId,
       createdBy,
-      notes: `Membership Assigned: ${plan.name}`,
+      notes: `Membership Assigned: ${plan.name}` + (remainingBalance > 0 ? ` (Partial Payment. Balance: ${remainingBalance})` : ''),
     };
 
     const paymentId = await LedgerService.addPayment(ledgerEntry);
@@ -62,7 +86,7 @@ export class MembershipService {
         isTrial: false,
         wasTrial: true,
         trialConvertedAt: Date.now()
-      });
+      }, createdBy, branchId);
     }
     
     return paymentId;

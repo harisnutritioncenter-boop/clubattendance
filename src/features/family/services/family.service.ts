@@ -1,15 +1,26 @@
 import { addDoc, doc, getDoc, getDocs, query, updateDoc, where, orderBy } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { FamilyGroup, CreateFamilyGroupDTO } from '../types/family.types';
+import { ActivityLogsService } from '@/features/activity-logs/services/activity.service';
 
 export class FamilyService {
-  static async createFamily(data: CreateFamilyGroupDTO): Promise<string> {
+  static async createFamily(data: CreateFamilyGroupDTO, performedBy: string, branchId?: string): Promise<string> {
     const newDoc = await addDoc(COLLECTIONS.FAMILY_GROUPS, {
       ...data,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isArchived: false,
     });
+    
+    ActivityLogsService.logActivity(
+      'CREATE',
+      'FamilyAccount',
+      newDoc.id,
+      `Created family account with ${data.memberIds.length} members`,
+      performedBy,
+      branchId || data.branchId
+    );
+    
     return newDoc.id;
   }
 
@@ -22,6 +33,31 @@ export class FamilyService {
     );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FamilyGroup));
+  }
+
+  static async updateFamily(id: string, updates: Partial<FamilyGroup>, performedBy: string, branchId?: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.FAMILY_GROUPS, id);
+    await updateDoc(docRef, { ...updates, updatedAt: Date.now() });
+    
+    if (updates.isArchived) {
+      ActivityLogsService.logActivity(
+        'ARCHIVE',
+        'FamilyAccount',
+        id,
+        `Archived family account`,
+        performedBy,
+        branchId
+      );
+    } else {
+      ActivityLogsService.logActivity(
+        'UPDATE',
+        'FamilyAccount',
+        id,
+        `Updated family account members`,
+        performedBy,
+        branchId
+      );
+    }
   }
 
   // Find if a customer is part of any family (either as primary or member)

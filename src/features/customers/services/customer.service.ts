@@ -1,6 +1,5 @@
 import {
   addDoc,
-  collection,
   doc,
   getDoc,
   getDocs,
@@ -10,21 +9,34 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db, COLLECTIONS } from '@/firebase';
+import { cleanPayload } from '@/lib/utils';
 import { Customer, CreateCustomerDTO } from '../types/customer.types';
+
+import { ActivityLogsService } from '@/features/activity-logs/services/activity.service';
 
 export class CustomerService {
   static async createCustomer(data: CreateCustomerDTO): Promise<string> {
     // Generate a simple 4 digit ID e.g. HC-8492
     const displayId = `HC-${Math.floor(1000 + Math.random() * 9000)}`;
     
-    const newDoc = await addDoc(COLLECTIONS.CUSTOMERS, {
+    const newDoc = await addDoc(COLLECTIONS.CUSTOMERS, cleanPayload({
       ...data,
       displayId,
       wasTrial: data.isTrial || false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isArchived: false,
-    });
+    }));
+    
+    ActivityLogsService.logActivity(
+      'CREATE', 
+      data.isTrial ? 'Trial' : 'Customer', 
+      newDoc.id, 
+      `Added new ${data.isTrial ? 'trial' : 'customer'} ${data.name} (${data.mobile})`, 
+      data.createdBy,
+      data.branchId
+    );
+    
     return newDoc.id;
   }
 
@@ -55,19 +67,54 @@ export class CustomerService {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
   }
 
-  static async updateCustomer(id: string, updates: Partial<Customer>): Promise<void> {
+  static async updateCustomer(id: string, updates: Partial<Customer>, performedBy: string, branchId?: string): Promise<void> {
     const docRef = doc(COLLECTIONS.CUSTOMERS, id);
     await updateDoc(docRef, {
       ...updates,
       updatedAt: Date.now(),
     });
+    
+    ActivityLogsService.logActivity(
+      'UPDATE', 
+      'Customer', 
+      id, 
+      `Updated profile for customer`, 
+      performedBy,
+      branchId
+    );
   }
 
-  static async softDeleteCustomer(id: string): Promise<void> {
+  static async softDeleteCustomer(id: string, performedBy: string, branchId?: string): Promise<void> {
     const docRef = doc(COLLECTIONS.CUSTOMERS, id);
     await updateDoc(docRef, {
       isArchived: true,
       updatedAt: Date.now(),
     });
+    
+    ActivityLogsService.logActivity(
+      'ARCHIVE', 
+      'Customer', 
+      id, 
+      `Archived customer`, 
+      performedBy,
+      branchId
+    );
+  }
+
+  static async revertCustomer(id: string, performedBy: string, branchId?: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.CUSTOMERS, id);
+    await updateDoc(docRef, {
+      isArchived: false,
+      updatedAt: Date.now(),
+    });
+    
+    ActivityLogsService.logActivity(
+      'REVERT', 
+      'Customer', 
+      id, 
+      `Restored archived customer`, 
+      performedBy,
+      branchId
+    );
   }
 }

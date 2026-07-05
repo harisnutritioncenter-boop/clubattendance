@@ -10,9 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
 import { AssignMembershipModal } from '@/features/memberships/components/assign-membership-modal';
-import { Plus, UserCheck } from 'lucide-react';
+import { Plus, UserCheck, SlidersHorizontal } from 'lucide-react';
 import { getDocs, query, where, orderBy } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase/collections';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function TrialsPage() {
   const branchId = useBranchStore(state => state.activeBranchId);
@@ -33,55 +34,55 @@ export default function TrialsPage() {
   // Modals
   const [isAddTrialOpen, setIsAddTrialOpen] = useState(false);
   const [assignModalCustomer, setAssignModalCustomer] = useState<{ id: string; name: string } | null>(null);
+  
+  // Edit Modal
+  const [editModalCustomer, setEditModalCustomer] = useState<Customer | null>(null);
+
+  const fetchTrials = async (isActive = true) => {
+    try {
+      setLoading(true);
+      const bId = branchId || 'default-branch';
+      let customers: Customer[] = [];
+      
+      if (role === 'super_admin' && !branchId) {
+        const q = query(COLLECTIONS.CUSTOMERS, where('isArchived', '==', false), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        customers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+      } else {
+        customers = await CustomerService.getActiveCustomers(bId);
+      }
+      
+      if (!isActive) return;
+      
+      // Fetch Maps for Filters
+      const usersSnap = await getDocs(COLLECTIONS.USERS);
+      const partnerMap: Record<string, string> = {};
+      usersSnap.docs.forEach(doc => {
+        partnerMap[doc.id] = doc.data().name || doc.data().email || 'Unknown';
+      });
+      setPartners(partnerMap);
+
+      if (role === 'super_admin') {
+        const branchesSnap = await getDocs(COLLECTIONS.BRANCHES);
+        const clubMap: Record<string, string> = {};
+        branchesSnap.docs.forEach(doc => {
+          clubMap[doc.id] = doc.data().name;
+        });
+        setClubs(clubMap);
+      }
+      
+      setTrials(customers.filter(c => c.isTrial === true || c.wasTrial === true));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (isActive) setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isActive = true;
-    const fetchTrials = async () => {
-      try {
-        setLoading(true);
-        const bId = branchId || 'default-branch';
-        let customers: Customer[] = [];
-        
-        if (role === 'super_admin' && !branchId) {
-          const q = query(COLLECTIONS.CUSTOMERS, where('isArchived', '==', false), orderBy('createdAt', 'desc'));
-          const snap = await getDocs(q);
-          customers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
-        } else {
-          customers = await CustomerService.getActiveCustomers(bId);
-        }
-        
-        if (!isActive) return;
-        
-        // Fetch Maps for Filters
-        const usersSnap = await getDocs(COLLECTIONS.USERS);
-        const partnerMap: Record<string, string> = {};
-        usersSnap.docs.forEach(doc => {
-          partnerMap[doc.id] = doc.data().name || doc.data().email || 'Unknown';
-        });
-        setPartners(partnerMap);
-
-        if (role === 'super_admin') {
-          const branchesSnap = await getDocs(COLLECTIONS.BRANCHES);
-          const clubMap: Record<string, string> = {};
-          branchesSnap.docs.forEach(doc => {
-            clubMap[doc.id] = doc.data().name;
-          });
-          setClubs(clubMap);
-        }
-        
-        setTrials(customers.filter(c => c.isTrial === true || c.wasTrial === true));
-      } catch (err) {
-        console.error(err);
-      } finally {
-        if (isActive) setLoading(false);
-      }
-    };
-
-    fetchTrials();
-    
-    return () => {
-      isActive = false;
-    };
+    fetchTrials(isActive);
+    return () => { isActive = false; };
   }, [branchId, role]);
 
   return (
@@ -95,7 +96,7 @@ export default function TrialsPage() {
           <DialogTrigger render={<Button className="gap-2" />}>
             <Plus className="h-4 w-4" /> Add Trial
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-y-auto sm:rounded-2xl">
             <DialogHeader>
               <DialogTitle>Add New Trial Customer</DialogTitle>
             </DialogHeader>
@@ -103,7 +104,7 @@ export default function TrialsPage() {
               isTrial={true}
               onSuccess={() => {
                 setIsAddTrialOpen(false);
-                window.location.reload();
+                fetchTrials();
               }}
               onCancel={() => setIsAddTrialOpen(false)}
             />
@@ -112,73 +113,91 @@ export default function TrialsPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-start justify-between space-y-4 md:space-y-0">
+        <CardHeader className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 space-y-0 pb-4">
           <div>
             <CardTitle>Trial History</CardTitle>
             <CardDescription>View all trial customers and their conversion status.</CardDescription>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <select 
-              className="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              value={filterMonth}
-              onChange={(e) => setFilterMonth(e.target.value)}
-            >
-              <option value="all">All Months</option>
-              <option value="0">January</option>
-              <option value="1">February</option>
-              <option value="2">March</option>
-              <option value="3">April</option>
-              <option value="4">May</option>
-              <option value="5">June</option>
-              <option value="6">July</option>
-              <option value="7">August</option>
-              <option value="8">September</option>
-              <option value="9">October</option>
-              <option value="10">November</option>
-              <option value="11">December</option>
-            </select>
-            <select 
-              className="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              value={filterYear}
-              onChange={(e) => setFilterYear(e.target.value)}
-            >
-              <option value="all">All Years</option>
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
-              <option value="2024">2024</option>
-            </select>
-            <select 
-              className="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="all">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="converted">Converted</option>
-            </select>
+          
+          <div className="grid grid-cols-5 gap-2 w-full xl:w-auto mt-4 xl:mt-0">
+            
+            <div className="min-w-0">
+              <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Month</label>
+              <Select value={filterMonth} onValueChange={(val) => setFilterMonth(val || 'all')}>
+                <SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="Month" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="0">Jan</SelectItem>
+                  <SelectItem value="1">Feb</SelectItem>
+                  <SelectItem value="2">Mar</SelectItem>
+                  <SelectItem value="3">Apr</SelectItem>
+                  <SelectItem value="4">May</SelectItem>
+                  <SelectItem value="5">Jun</SelectItem>
+                  <SelectItem value="6">Jul</SelectItem>
+                  <SelectItem value="7">Aug</SelectItem>
+                  <SelectItem value="8">Sep</SelectItem>
+                  <SelectItem value="9">Oct</SelectItem>
+                  <SelectItem value="10">Nov</SelectItem>
+                  <SelectItem value="11">Dec</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="min-w-0">
+              <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Year</label>
+              <Select value={filterYear} onValueChange={(val) => setFilterYear(val || 'all')}>
+                <SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="Year" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {Array.from(new Set(trials.map(t => new Date(t.createdAt).getFullYear()))).sort((a, b) => b - a).map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-0">
+              <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Status</label>
+              <Select value={filterStatus} onValueChange={(val) => setFilterStatus(val || 'all')}>
+                <SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="converted">Converted</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {role !== 'junior_partner' && (
-              <select 
-                className="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                value={filterJp}
-                onChange={(e) => setFilterJp(e.target.value)}
-              >
-                <option value="all">All Partners</option>
-                {Object.entries(partners).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
+              <div className="min-w-0">
+                <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Partner</label>
+                <Select value={filterJp} onValueChange={(val) => setFilterJp(val || 'all')}>
+                  <SelectTrigger className="h-8 text-xs px-2">
+                    <SelectValue placeholder="Partner" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {Object.entries(partners).map(([id, name]) => (
+                      <SelectItem key={id} value={id}>{name.split(' ')[0]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
+            
             {role === 'super_admin' && !branchId && (
-              <select 
-                className="flex h-10 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                value={filterClub}
-                onChange={(e) => setFilterClub(e.target.value)}
-              >
-                <option value="all">All Clubs</option>
-                {Object.entries(clubs).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
+              <div className="min-w-0">
+                <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Club</label>
+                <Select value={filterClub} onValueChange={(val) => setFilterClub(val || 'all')}>
+                  <SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="Club" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {Object.entries(clubs).map(([id, name]) => (
+                      <SelectItem key={id} value={id}>{name.split(' ')[0]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </div>
         </CardHeader>
@@ -192,59 +211,73 @@ export default function TrialsPage() {
               <Button variant="outline" onClick={() => setIsAddTrialOpen(true)}>Add a Trial Customer</Button>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Purpose</TableHead>
-                  <TableHead>Joined On</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {trials
-                  .filter(c => {
-                    if (filterStatus === 'pending' && !c.isTrial) return false;
-                    if (filterStatus === 'converted' && c.isTrial) return false;
-                    
-                    if (filterJp !== 'all' && c.juniorPartnerId !== filterJp && c.createdBy !== filterJp) return false;
-                    if (filterClub !== 'all' && c.branchId !== filterClub) return false;
-                    
-                    const d = new Date(c.createdAt);
-                    if (filterYear !== 'all' && d.getFullYear().toString() !== filterYear) return false;
-                    if (filterMonth !== 'all' && d.getMonth().toString() !== filterMonth) return false;
-                    
-                    return true;
-                  })
-                  .map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>
-                      <div className="font-medium">{c.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.displayId} | {c.mobile}</div>
-                    </TableCell>
-                    <TableCell>
-                      {c.purpose.length > 0 ? c.purpose.join(', ') : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(c.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {c.isTrial && (
-                        <Button 
-                          variant="secondary" 
-                          size="sm"
-                          onClick={() => {
-                            setAssignModalCustomer({ id: c.id, name: c.name });
-                          }}
-                        >
-                          Assign Membership
-                        </Button>
-                      )}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Purpose</TableHead>
+                    <TableHead>Joined On</TableHead>
+                    <TableHead className="text-right">Action / Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {trials
+                    .filter(c => {
+                      if (filterStatus === 'pending' && !c.isTrial) return false;
+                      if (filterStatus === 'converted' && c.isTrial) return false;
+                      
+                      if (filterJp !== 'all' && c.juniorPartnerId !== filterJp && c.createdBy !== filterJp) return false;
+                      if (filterClub !== 'all' && c.branchId !== filterClub) return false;
+                      
+                      const d = new Date(c.createdAt);
+                      if (filterYear !== 'all' && d.getFullYear().toString() !== filterYear) return false;
+                      if (filterMonth !== 'all' && d.getMonth().toString() !== filterMonth) return false;
+                      
+                      return true;
+                    })
+                    .map((c) => (
+                    <TableRow 
+                      key={c.id} 
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setEditModalCustomer(c)}
+                    >
+                      <TableCell>
+                        <div className="font-medium">{c.name}</div>
+                        <div className="text-xs text-muted-foreground">{c.displayId} | {c.mobile}</div>
+                      </TableCell>
+                      <TableCell>
+                        {c.purpose.length > 0 ? c.purpose.join(', ') : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        {c.isTrial ? (
+                          <Button 
+                            variant="secondary" 
+                            size="sm"
+                            onClick={() => {
+                              setAssignModalCustomer({ id: c.id, name: c.name });
+                            }}
+                          >
+                            Assign Membership
+                          </Button>
+                        ) : c.trialConvertedAt ? (
+                          <div className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full inline-block">
+                            Converted on {new Date(c.trialConvertedAt).toLocaleDateString()}
+                          </div>
+                        ) : (
+                          <div className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full inline-block">
+                            Converted
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -257,18 +290,28 @@ export default function TrialsPage() {
           customerName={assignModalCustomer.name}
           onSuccess={() => {
             // Re-fetch trials to update status to converted
-            const bId = branchId || 'default-branch';
-            CustomerService.getActiveCustomers(bId).then(customers => {
-              let updated = customers;
-              if (role === 'junior_partner') {
-                const uid = useAuthStore.getState().user?.uid;
-                updated = updated.filter(cust => cust.createdBy === uid);
-              }
-              setTrials(updated.filter(cust => cust.isTrial === true || cust.wasTrial === true));
-            });
+            fetchTrials();
             setAssignModalCustomer(null);
           }}
         />
+      )}
+
+      {editModalCustomer && (
+        <Dialog open={!!editModalCustomer} onOpenChange={(open) => !open && setEditModalCustomer(null)}>
+          <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-y-auto sm:rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Trial Customer: {editModalCustomer.name}</DialogTitle>
+            </DialogHeader>
+            <CustomerForm 
+              customer={editModalCustomer}
+              onSuccess={() => {
+                setEditModalCustomer(null);
+                fetchTrials();
+              }}
+              onCancel={() => setEditModalCustomer(null)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

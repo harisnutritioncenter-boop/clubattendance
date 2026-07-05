@@ -16,11 +16,15 @@ import { Label } from '@/components/ui/label';
 import { MembershipService } from '@/features/memberships/services/membership.service';
 import { MembershipPlan } from '@/features/memberships/types/membership.types';
 import { useAuthStore } from '@/store';
+import { PlanDetailsModal } from '@/features/memberships/components/plan-details-modal';
+import { Badge } from '@/components/ui/badge';
 
 export default function MembershipsPage() {
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<MembershipPlan | null>(null);
   const role = useAuthStore(state => state.role);
 
   // Form State
@@ -31,7 +35,7 @@ export default function MembershipsPage() {
 
   const loadPlans = async () => {
     try {
-      const fetched = await MembershipService.getActivePlans();
+      const fetched = await MembershipService.getAllPlans();
       setPlans(fetched);
     } catch (error) {
       console.error(error);
@@ -107,9 +111,21 @@ export default function MembershipsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
           {plans.map((plan) => (
-            <Card key={plan.id}>
+            <Card 
+              key={plan.id} 
+              className="cursor-pointer hover:shadow-md transition-shadow relative overflow-hidden group"
+              onClick={() => {
+                setSelectedPlan(plan);
+                setDetailsOpen(true);
+              }}
+            >
+              {!plan.isActive && (
+                <div className="absolute top-0 right-0">
+                  <Badge variant="secondary" className="rounded-tl-none rounded-br-none">Paused</Badge>
+                </div>
+              )}
               <CardHeader>
-                <CardTitle className="text-xl">{plan.name}</CardTitle>
+                <CardTitle className="text-xl group-hover:text-primary transition-colors">{plan.name}</CardTitle>
                 <CardDescription>{plan.validityDays} Days Validity</CardDescription>
               </CardHeader>
               <CardContent>
@@ -125,6 +141,22 @@ export default function MembershipsPage() {
           )}
         </div>
       )}
+
+      <PlanDetailsModal 
+        plan={selectedPlan}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        onSuccess={() => {
+          loadPlans();
+          if (selectedPlan) {
+            // Re-fetch or update selected plan so details modal updates live
+            MembershipService.getAllPlans().then(all => {
+              const updated = all.find(p => p.id === selectedPlan.id);
+              if (updated) setSelectedPlan(updated);
+            });
+          }
+        }}
+      />
     </div>
   );
 }

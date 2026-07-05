@@ -4,10 +4,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { MembershipService } from '../services/membership.service';
 import { MembershipPlan } from '../types/membership.types';
 import { useAuthStore, useBranchStore } from '@/store';
@@ -25,6 +25,8 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'UPI' | 'Bank Transfer'>('Cash');
+  const [paymentType, setPaymentType] = useState<'Full' | 'Partial'>('Full');
+  const [partialAmount, setPartialAmount] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
 
   const { activeBranchId } = useBranchStore();
@@ -36,22 +38,40 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
     }
   }, [open, plans.length]);
 
+  const selectedPlan = plans.find(p => p.id === selectedPlanId);
+
   const handleAssign = async (e: React.FormEvent) => {
     e.preventDefault();
     const branchId = activeBranchId || 'default-branch';
-    if (!selectedPlanId || !user) return;
+    if (!selectedPlan || !user) return;
+    
+    let finalAmount = selectedPlan.price;
+    if (paymentType === 'Partial') {
+      if (!partialAmount || partialAmount <= 0) {
+        toast.error("Please enter a valid partial amount");
+        return;
+      }
+      finalAmount = Number(partialAmount);
+    }
     
     setLoading(true);
     try {
       await MembershipService.assignMembership(
         customerId,
-        selectedPlanId,
+        selectedPlan.id,
         paymentMethod,
         branchId,
-        user.uid
+        user.uid,
+        finalAmount
       );
       onSuccess?.();
       onOpenChange(false);
+      
+      // Reset form states
+      setSelectedPlanId('');
+      setPaymentType('Full');
+      setPartialAmount('');
+      
     } catch (error) {
       console.error(error);
       toast.error("Failed to assign membership.");
@@ -84,22 +104,76 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
               ))}
             </select>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="payment">Payment Method</Label>
-            <select
-              id="payment"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={paymentMethod}
-              onChange={e => setPaymentMethod(e.target.value as any)}
-              required
-            >
-              <option value="Cash">Cash</option>
-              <option value="Card">Card</option>
-              <option value="UPI">UPI</option>
-              <option value="Bank Transfer">Bank Transfer</option>
-            </select>
-          </div>
+
+          {selectedPlan && (
+            <>
+              <div className="space-y-3 bg-muted/50 p-4 rounded-lg border">
+                <Label>Payment Collection</Label>
+                <div className="flex items-center gap-6 mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="paymentType" 
+                      value="Full" 
+                      checked={paymentType === 'Full'} 
+                      onChange={() => setPaymentType('Full')}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm font-medium">Full Payment (₹{selectedPlan.price})</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="paymentType" 
+                      value="Partial" 
+                      checked={paymentType === 'Partial'} 
+                      onChange={() => setPaymentType('Partial')}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm font-medium">Partial Payment</span>
+                  </label>
+                </div>
+                
+                {paymentType === 'Partial' && (
+                  <div className="pt-2 animate-in fade-in slide-in-from-top-2">
+                    <Label htmlFor="partialAmount" className="text-xs text-muted-foreground">Amount Paid Today (₹)</Label>
+                    <Input 
+                      id="partialAmount" 
+                      type="number" 
+                      min="1" 
+                      max={selectedPlan.price - 1} 
+                      placeholder="e.g. 1000" 
+                      value={partialAmount}
+                      onChange={(e) => setPartialAmount(e.target.value ? Number(e.target.value) : '')}
+                      required={paymentType === 'Partial'}
+                      className="mt-1"
+                    />
+                    {partialAmount && (
+                      <p className="text-xs text-destructive mt-1 font-medium">
+                        Remaining Balance will be: ₹{selectedPlan.price - Number(partialAmount)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="payment">Payment Method</Label>
+                <select
+                  id="payment"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={paymentMethod}
+                  onChange={e => setPaymentMethod(e.target.value as any)}
+                  required
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Card">Card</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                </select>
+              </div>
+            </>
+          )}
 
           <Button type="submit" className="w-full" disabled={loading || !selectedPlanId}>
             {loading ? 'Processing...' : 'Confirm & Charge'}
