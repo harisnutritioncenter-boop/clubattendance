@@ -48,23 +48,21 @@ export class CustomerService {
   }
 
   static async getActiveCustomers(branchId?: string | null): Promise<Customer[]> {
-    let q;
-    if (branchId) {
-      q = query(
-        COLLECTIONS.CUSTOMERS,
-        where('branchId', '==', branchId),
-        where('isArchived', '==', false),
-        orderBy('createdAt', 'desc')
-      );
-    } else {
-      q = query(
-        COLLECTIONS.CUSTOMERS,
-        where('isArchived', '==', false),
-        orderBy('createdAt', 'desc')
-      );
-    }
+    // Fetch all active customers and filter in-memory to bypass Firebase composite index requirements
+    const q = query(
+      COLLECTIONS.CUSTOMERS,
+      where('isArchived', '==', false),
+      orderBy('createdAt', 'desc')
+    );
+    
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+    let customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+    
+    if (branchId && branchId !== 'default-branch' && branchId !== 'all') {
+      customers = customers.filter(c => c.branchId === branchId);
+    }
+    
+    return customers;
   }
 
   static async updateCustomer(id: string, updates: Partial<Customer>, performedBy: string, branchId?: string): Promise<void> {

@@ -54,8 +54,7 @@ export function ArchiveDashboard() {
     if (!user) return;
     try {
       if (activeTab === 'customers') {
-        await CustomerService.revertCustomer(id);
-        await ActivityLogsService.logActivity('REVERT', 'Customer', id, `Reverted customer ${id}`, user.uid);
+        await CustomerService.revertCustomer(id, user.uid);
       } else if (activeTab === 'partners') {
         await PartnerService.revertPartner(id);
         await ActivityLogsService.logActivity('REVERT', 'Partner', id, `Reverted partner ${id}`, user.uid);
