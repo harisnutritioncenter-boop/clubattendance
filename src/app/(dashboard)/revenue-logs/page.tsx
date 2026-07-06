@@ -41,8 +41,12 @@ export default function RevenueLogsPage() {
       ]);
 
       const customerMap: Record<string, string> = {};
+      const customerPartnerMap: Record<string, string> = {};
       customersSnap.forEach(c => {
         customerMap[c.id] = c.displayId ? `${c.displayId} (${c.name})` : c.name;
+        if (c.juniorPartnerId) {
+          customerPartnerMap[c.id] = c.juniorPartnerId;
+        }
       });
 
       const userMap: Record<string, string> = {};
@@ -50,11 +54,14 @@ export default function RevenueLogsPage() {
         userMap[d.id] = d.data().name || d.data().email || d.id;
       });
 
-      let formattedLogs = payments.map(p => ({
-        ...p,
-        customerName: customerMap[p.customerId] || 'Unknown Customer',
-        partnerName: userMap[p.createdBy] || 'Unknown Partner'
-      }));
+      let formattedLogs = payments.map(p => {
+        const partnerId = customerPartnerMap[p.customerId] || p.createdBy;
+        return {
+          ...p,
+          customerName: customerMap[p.customerId] || 'Unknown Customer',
+          partnerName: userMap[partnerId] || 'Unknown Partner'
+        };
+      });
 
       const role = useAuthStore.getState().role;
       const user = useAuthStore.getState().user;

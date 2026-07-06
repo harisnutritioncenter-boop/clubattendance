@@ -5,7 +5,7 @@ export const partnerSchema = z.object({
   mobile: z.string().optional(),
   address: z.string().optional(),
   locality: z.string().optional(),
-  birthDate: z.string().min(1, 'Birth date is required'),
+  birthDate: z.string().optional(),
 });
 
 export type PartnerFormValues = z.infer<typeof partnerSchema>;

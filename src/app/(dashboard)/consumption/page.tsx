@@ -250,58 +250,14 @@ export default function ConsumptionPage() {
                 )}
               </div>
 
-              {/* Balance Status */}
-              <div className="text-center">
-                <h2 className="text-xl font-semibold mb-2">{selectedCustomer?.name}</h2>
-                <div className="inline-flex items-center justify-center gap-4 bg-secondary p-4 rounded-xl w-full">
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Remaining</p>
-                    <p className={`text-3xl font-bold ${balance.remainingShakes > 0 ? 'text-primary' : 'text-destructive'}`}>
-                      {balance.remainingShakes}
-                    </p>
-                  </div>
-                  <div className="h-12 w-px bg-border mx-2"></div>
-                  <div className="text-center">
-                    <p className="text-sm text-muted-foreground">Expiry</p>
-                    <p className={`text-lg font-medium ${balance.isExpired ? 'text-destructive' : ''}`}>
-                      {balance.validUntil ? new Date(balance.validUntil).toLocaleDateString() : 'None'}
-                    </p>
-                  </div>
-                </div>
+              {/* Customer Name */}
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold">{selectedCustomer?.name}</h2>
               </div>
 
-              {/* Due Balance Section */}
-              {balance.remainingBalance > 0 && (
-                <div className="bg-destructive/10 text-destructive px-6 py-4 rounded-xl border border-destructive/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div>
-                    <p className="font-semibold text-lg flex items-center gap-2">
-                      <Banknote className="h-5 w-5" /> Due Balance: ₹{balance.remainingBalance}
-                    </p>
-                    <p className="text-sm opacity-80">This customer has an outstanding payment.</p>
-                  </div>
-                  <Button 
-                    variant="destructive" 
-                    onClick={() => setIsCollectModalOpen(true)}
-                  >
-                    Collect Payment
-                  </Button>
-                </div>
-              )}
-
-              {/* Action Area */}
-              {balance.remainingShakes <= 0 && (
-                <div className="bg-destructive/10 text-destructive p-4 rounded-lg flex flex-col items-center gap-2 border border-destructive/20 mb-6">
-                  <p className="font-medium text-center">
-                    Customer has 0 or fewer shakes remaining. Please assign a new plan.
-                  </p>
-                  <Button variant="destructive" size="sm" onClick={() => setIsAssignModalOpen(true)}>
-                    Assign Plan
-                  </Button>
-                </div>
-              )}
-              
+              {/* Serve Shake Action Area */}
               {success ? (
-                <div className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 p-8 rounded-xl text-center border border-green-200 dark:border-green-800 animate-in zoom-in-95 duration-300 flex flex-col items-center justify-center space-y-4">
+                <div className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 p-8 rounded-xl text-center border border-green-200 dark:border-green-800 animate-in zoom-in-95 duration-300 flex flex-col items-center justify-center space-y-4 mb-8">
                   <div className="h-16 w-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-2">
                     <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
                   </div>
@@ -317,7 +273,7 @@ export default function ConsumptionPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-6 mb-8">
                   <div className="flex flex-col items-center gap-4 p-6 bg-muted/30 rounded-xl border border-dashed">
                     <p className="text-lg font-medium">How many shakes?</p>
                     <div className="flex items-center gap-6 bg-background p-2 rounded-full shadow-sm border">
@@ -348,10 +304,58 @@ export default function ConsumptionPage() {
                     size="lg" 
                     className="w-full h-14 text-lg font-bold" 
                     onClick={handleServe}
-                    disabled={loading}
+                    disabled={loading || balance.remainingShakes <= 0}
                   >
                     <GlassWater className="mr-2 h-6 w-6" />
                     {loading ? 'Processing...' : `Serve ${serveCount} Shake${serveCount > 1 ? 's' : ''}`}
+                  </Button>
+
+                  {balance.remainingShakes <= 0 && (
+                    <div className="bg-destructive/10 text-destructive p-4 rounded-lg flex flex-col items-center gap-2 border border-destructive/20 mt-2">
+                      <p className="font-medium text-center">
+                        Customer has 0 or fewer shakes remaining. Please assign a new plan.
+                      </p>
+                      <Button variant="destructive" size="sm" onClick={() => setIsAssignModalOpen(true)}>
+                        Assign Plan
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Balance Status */}
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center gap-4 bg-secondary p-4 rounded-xl w-full">
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">Remaining</p>
+                    <p className={`text-3xl font-bold ${balance.remainingShakes > 0 ? 'text-primary' : 'text-destructive'}`}>
+                      {balance.remainingShakes}
+                    </p>
+                  </div>
+                  <div className="h-12 w-px bg-border mx-2"></div>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">Expiry</p>
+                    <p className={`text-lg font-medium ${balance.isExpired ? 'text-destructive' : ''}`}>
+                      {balance.validUntil ? new Date(balance.validUntil).toLocaleDateString() : 'None'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Due Balance Section */}
+              {balance.remainingBalance > 0 && (
+                <div className="bg-destructive/10 text-destructive px-6 py-4 rounded-xl border border-destructive/20 flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
+                  <div>
+                    <p className="font-semibold text-lg flex items-center gap-2">
+                      <Banknote className="h-5 w-5" /> Due Balance: ₹{balance.remainingBalance}
+                    </p>
+                    <p className="text-sm opacity-80">This customer has an outstanding payment.</p>
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => setIsCollectModalOpen(true)}
+                  >
+                    Collect Payment
                   </Button>
                 </div>
               )}

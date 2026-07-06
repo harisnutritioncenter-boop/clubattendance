@@ -153,7 +153,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
       const bId = values.branchId || activeBranchId || 'default-branch';
       const createdBy = user?.uid || 'system';
       
-      const birthDateTimestamp = values.birthDate ? new Date(values.birthDate).getTime() : undefined;
+      const birthDateTimestamp = values.birthDate ? new Date(values.birthDate).getTime() : null;
 
       if (customer) {
         await CustomerService.updateCustomer(

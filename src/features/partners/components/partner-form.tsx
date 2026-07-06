@@ -42,7 +42,7 @@ export function PartnerForm({ partner, onSuccess, onCancel }: PartnerFormProps) 
   const onSubmit = async (values: PartnerFormValues) => {
     try {
       setError(null);
-      const birthDateTimestamp = values.birthDate ? new Date(values.birthDate).getTime() : undefined;
+      const birthDateTimestamp = values.birthDate ? new Date(values.birthDate).getTime() : null;
 
       await PartnerService.updatePartner(partner.id, {
         name: values.name,
