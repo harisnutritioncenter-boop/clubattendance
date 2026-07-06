@@ -17,6 +17,7 @@ import { Plus, UserCog, PackagePlus, Info, Building2 } from 'lucide-react';
 import { UserRole, useAuthStore } from '@/store';
 import { PartnerInventoryService } from '@/features/partners/services/partner-inventory.service';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 const secondaryApp = initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
@@ -50,7 +51,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
   const [isAssigningClub, setIsAssigningClub] = useState(false);
 
   const fetchBalance = async () => {
-    if (partner.role === 'junior_partner') {
+    if (partner.role === 'junior_partner' || partner.role === 'club_owner') {
       const bal = await PartnerInventoryService.getInventoryBalance(partner.id);
       setBalance(bal);
     }
@@ -81,7 +82,9 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
   return (
     <>
       <TableRow>
-        <TableCell className="font-medium">{partner.name || '-'}</TableCell>
+        <TableCell className="font-medium">
+          {partner.name || 'Unnamed'}
+        </TableCell>
         <TableCell>{partner.email}</TableCell>
         <TableCell className="capitalize">{partner.role === 'club_owner' ? 'Club Owner' : partner.role.replace('_', ' ')}</TableCell>
         <TableCell>
@@ -152,7 +155,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
           )}
         </TableCell>
         <TableCell className="text-right">
-          {partner.role === 'junior_partner' ? (
+          {(partner.role === 'junior_partner' || partner.role === 'club_owner') ? (
             <div className="flex items-center justify-end gap-3">
               <span className={`font-bold ${balance !== null && balance < 0 ? 'text-destructive' : 'text-primary'}`}>
                 {balance !== null ? `${balance} Shakes` : '...'}
@@ -163,9 +166,16 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
               <Button size="sm" variant="default" className="gap-2" onClick={() => setIsAssignOpen(true)}>
                 <PackagePlus className="h-4 w-4" /> Manage Shakes
               </Button>
+              <Link href={`/partners/${partner.id}`}>
+                <Button size="sm" variant="secondary">View Profile</Button>
+              </Link>
             </div>
           ) : (
-            <span className="text-muted-foreground">-</span>
+            <div className="flex items-center justify-end gap-3">
+              <Link href={`/partners/${partner.id}`}>
+                <Button size="sm" variant="secondary">View Profile</Button>
+              </Link>
+            </div>
           )}
         </TableCell>
       </TableRow>

@@ -74,7 +74,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
 
         usersSnap.docs.forEach(d => {
           const data = d.data();
-          if (data.role === 'junior_partner') {
+          if (data.role === 'junior_partner' || data.role === 'club_owner') {
             const label = data.name || data.email || d.id;
             jps.push({ value: d.id, label });
             refs.push(label);

@@ -23,7 +23,7 @@ export const customerSchema = z.object({
   juniorPartnerId: z.string().optional(),
   branchId: z.string().optional(),
   reference: z.string().optional(),
-  birthDate: z.string().optional(),
+  birthDate: z.string().min(1, 'Birth date is required'),
   assignPlanId: z.string().optional(),
   paymentMethod: z.enum(['Cash', 'Card', 'UPI', 'Bank Transfer']).optional(),
 }).refine((data) => {

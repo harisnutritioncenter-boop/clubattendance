@@ -9,9 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Building2, Bell, Settings2, ShieldCheck, ArchiveRestore } from 'lucide-react';
 import { useState } from 'react';
 import { ArchiveDashboard } from '@/features/settings/components/archive-dashboard';
+import { useAuthStore } from '@/store';
+import Link from 'next/link';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
+  const user = useAuthStore(state => state.user);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -90,6 +93,15 @@ export default function SettingsPage() {
                       <SelectItem value="utc">Universal Time (UTC)</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="grid gap-2 mt-4">
+                  <Label>My Profile</Label>
+                  <p className="text-sm text-muted-foreground mb-2">View your performance metrics, inventory, and edit your profile details.</p>
+                  {user && (
+                    <Link href={`/partners/${user.uid}`}>
+                      <Button variant="outline">View My Profile</Button>
+                    </Link>
+                  )}
                 </div>
                 <Button className="mt-4">Save Changes</Button>
               </CardContent>

@@ -100,7 +100,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
 
         usersSnap.docs.forEach(d => {
           const data = d.data();
-          if (data.role === 'junior_partner') {
+          if (data.role === 'junior_partner' || data.role === 'club_owner') {
             const label = data.name || data.email || d.id;
             jps.push({ id: d.id, name: label, branchId: data.clubId || data.branchId || '' });
             refs.push(label);
