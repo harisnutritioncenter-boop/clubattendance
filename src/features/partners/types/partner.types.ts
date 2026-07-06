@@ -6,7 +6,7 @@ export interface Partner {
   mobile?: string;
   address?: string;
   locality?: string;
-  birthDate?: number;
+  birthDate?: number | null;
   clubId?: string;
   createdAt?: number;
   isArchived?: boolean;
