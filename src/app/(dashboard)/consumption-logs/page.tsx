@@ -174,7 +174,11 @@ export default function ConsumptionLogsPage() {
               <div className="space-y-2">
                 <Label>Club</Label>
                 <Select value={selectedClub} onValueChange={(v) => setSelectedClub(v || '')}>
-                  <SelectTrigger><SelectValue placeholder="All Clubs" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Clubs">
+                      {selectedClub === 'all' ? 'All Clubs' : branches.find(b => b.id === selectedClub)?.name || selectedClub}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Clubs</SelectItem>
                     {branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}

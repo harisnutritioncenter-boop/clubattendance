@@ -352,12 +352,12 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
         </div>
 
         <div className="border-t pt-4 border-b pb-4 bg-muted/20 px-4 rounded-md">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
             <h3 className="font-semibold text-lg">Offline Migration Data</h3>
             <Tabs 
               value={migrationType} 
               onValueChange={(v) => form.setValue('migrationType', v as any)}
-              className="w-[300px]"
+              className="w-full sm:w-[300px]"
             >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="custom">Custom</TabsTrigger>

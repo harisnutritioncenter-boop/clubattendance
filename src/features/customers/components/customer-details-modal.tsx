@@ -40,8 +40,8 @@ export function CustomerDetailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col overflow-hidden p-4 md:p-6">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="text-2xl flex items-center gap-2">
             <UserCircle className="h-6 w-6 text-primary" />
             {customer.name}
@@ -51,7 +51,7 @@ export function CustomerDetailsModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-y-auto max-h-[60vh] pr-4">
+        <div className="overflow-y-auto flex-1 pr-2 md:pr-4 -mr-2 md:-mr-4">
           <div className="space-y-6 pt-4">
             
             {/* Contact Info */}
@@ -147,31 +147,32 @@ export function CustomerDetailsModal({
           </div>
         )}
 
-        <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-3 w-full">
-          <Button 
-            className="w-full sm:w-auto"
-            onClick={() => {
-              onOpenChange(false);
-              router.push(`/customers/${customer.id}`);
-            }}
-          >
-            <ExternalLink className="h-4 w-4 mr-2" /> View Full Profile
-          </Button>
-          
-          <div className="flex gap-2 w-full sm:w-auto flex-1 justify-end flex-wrap">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Close
+        <DialogFooter className="mt-4 border-t pt-4 shrink-0 flex flex-col gap-2 sm:gap-3 w-full sm:flex-row sm:flex-wrap">
+          <div className="flex flex-col sm:flex-row gap-2 w-full">
+            <Button 
+              className="w-full sm:flex-1"
+              onClick={() => {
+                onOpenChange(false);
+                router.push(`/customers/${customer.id}`);
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" /> View Full Profile
             </Button>
-            <Button variant="secondary" onClick={onEditClick}>
+            <Button className="w-full sm:flex-1 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={onAssignPlanClick}>
+              <ClipboardList className="h-4 w-4" /> Assign Plan
+            </Button>
+          </div>
+          <div className="flex gap-2 w-full mt-1 sm:mt-0">
+            <Button variant="secondary" className="flex-1" onClick={onEditClick}>
               Edit
             </Button>
             {onArchiveClick && (
-              <Button variant="destructive" onClick={onArchiveClick}>
+              <Button variant="destructive" className="flex-1" onClick={onArchiveClick}>
                 Archive
               </Button>
             )}
-            <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={onAssignPlanClick}>
-              <ClipboardList className="h-4 w-4" /> Assign Plan
+            <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              Close
             </Button>
           </div>
         </DialogFooter>

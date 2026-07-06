@@ -191,10 +191,10 @@ export default function CustomerProfilePage() {
       </div>
 
       <Tabs defaultValue="calendar" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl mb-8">
-          <TabsTrigger value="profile" className="gap-2"><User className="h-4 w-4" /> Profile Details</TabsTrigger>
-          <TabsTrigger value="calendar" className="gap-2"><CalendarIcon className="h-4 w-4" /> Attendance</TabsTrigger>
-          <TabsTrigger value="payments" className="gap-2"><CreditCard className="h-4 w-4" /> Payment History</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto justify-start sm:grid sm:grid-cols-3 max-w-2xl mb-8 p-1">
+          <TabsTrigger value="profile" className="whitespace-nowrap shrink-0 gap-2"><User className="h-4 w-4" /> Profile Details</TabsTrigger>
+          <TabsTrigger value="calendar" className="whitespace-nowrap shrink-0 gap-2"><CalendarIcon className="h-4 w-4" /> Attendance</TabsTrigger>
+          <TabsTrigger value="payments" className="whitespace-nowrap shrink-0 gap-2"><CreditCard className="h-4 w-4" /> Payment History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="mt-0">
@@ -262,7 +262,7 @@ export default function CustomerProfilePage() {
 
         <TabsContent value="calendar" className="mt-0">
           <Card className="border-0 shadow-lg bg-card/50">
-            <CardHeader className="flex flex-row items-center justify-between pb-8">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 sm:pb-8 gap-4">
               <div>
                 <CardTitle className="text-2xl">Attendance & Consumption</CardTitle>
                 <CardDescription>View daily shake consumption. Numbers represent (Consumed / Total Assigned).</CardDescription>
@@ -283,7 +283,7 @@ export default function CustomerProfilePage() {
                 
                 {/* Empty cells for start of month */}
                 {Array.from({ length: firstDay }).map((_, i) => (
-                  <div key={`empty-${i}`} className="bg-card min-h-[120px] p-2 opacity-50" />
+                  <div key={`empty-${i}`} className="bg-card min-h-[80px] sm:min-h-[120px] p-1 sm:p-2 opacity-50" />
                 ))}
                 
                 {/* Actual days */}
@@ -298,14 +298,14 @@ export default function CustomerProfilePage() {
                     <div 
                       key={day} 
                       onClick={() => handleDayClick(todaysLogs, day)}
-                      className={`bg-card min-h-[120px] p-3 flex flex-col relative transition-colors ${
+                      className={`bg-card min-h-[80px] sm:min-h-[120px] p-1 sm:p-3 flex flex-col relative transition-colors overflow-hidden ${
                         hasConsumedToday ? 'cursor-pointer hover:bg-primary/5' : ''
                       } ${isToday ? 'ring-2 ring-primary ring-inset z-10' : ''}`}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <span className={`font-semibold text-lg ${isToday ? 'text-primary' : ''}`}>{day}</span>
+                      <div className="flex flex-col sm:flex-row justify-between items-start mb-1 sm:mb-2 gap-1">
+                        <span className={`font-semibold text-sm sm:text-lg ${isToday ? 'text-primary' : ''}`}>{day}</span>
                         {hasConsumedToday && (
-                          <Badge variant="default" className="h-5 px-1.5 rounded-full bg-green-500 hover:bg-green-600">
+                          <Badge variant="default" className="h-4 sm:h-5 px-1 sm:px-1.5 rounded-full bg-green-500 hover:bg-green-600 text-[10px] sm:text-xs">
                             <Check className="h-3 w-3 mr-1" />
                             {todaysLogs.reduce((acc, log) => acc + ((log as ShakeLedgerEntry).shakesDeducted || 1), 0)}
                           </Badge>
@@ -335,7 +335,7 @@ export default function CustomerProfilePage() {
               <CardTitle>Payment & Transaction History</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
+              <div className="rounded-md border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50 text-left font-medium text-muted-foreground">
