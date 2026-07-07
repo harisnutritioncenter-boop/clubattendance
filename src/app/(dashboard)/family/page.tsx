@@ -93,7 +93,7 @@ export default function FamilyPage() {
     return c ? `${c.name} (${c.displayId})` : id;
   };
 
-  const customerOptions = customers.map(c => ({
+  const customerOptions = customers.filter(c => !c.isTrial).map(c => ({
     value: c.id,
     label: `${c.displayId || '-'} | ${c.name} | ${c.mobile}`
   }));

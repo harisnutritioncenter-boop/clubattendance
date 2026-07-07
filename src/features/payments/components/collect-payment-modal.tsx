@@ -29,7 +29,7 @@ export function CollectPaymentModal({
   onOpenChange,
   onSuccess
 }: CollectPaymentModalProps) {
-  const [amount, setAmount] = useState(amountDue.toString());
+  const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -102,7 +102,12 @@ export function CollectPaymentModal({
               id="amount"
               type="number"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              placeholder={`e.g. ${amountDue}`}
+              onChange={(e) => {
+                const val = e.target.value.replace(/-/g, '');
+                setAmount(val);
+              }}
+              min="1"
               max={amountDue}
             />
           </div>

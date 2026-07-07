@@ -346,6 +346,9 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
                     value={field.value || ''}
                     onChange={field.onChange}
                     placeholder="Select Junior Partner"
+                    emptyText="No partner found"
+                    onAddNew={() => window.open('/partners', '_blank')}
+                    addNewText="Add New Partner"
                   />
                   <FormMessage />
                 </FormItem>

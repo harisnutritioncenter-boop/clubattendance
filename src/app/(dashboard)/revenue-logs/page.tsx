@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Search, IndianRupee, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +28,7 @@ export default function RevenueLogsPage() {
   
   const [selectedClub, setSelectedClub] = useState<string>(globalBranchId || 'all');
   const [selectedCustomer, setSelectedCustomer] = useState('all');
-  const [selectedPartner, setSelectedPartner] = useState('all');
+  const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
   
   const [branches, setBranches] = useState<any[]>([]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -92,7 +94,7 @@ export default function RevenueLogsPage() {
       setLogs(formattedLogs);
       // reset secondary filters when data updates
       setSelectedCustomer('all');
-      setSelectedPartner('all');
+      setSelectedPartners([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -120,12 +122,12 @@ export default function RevenueLogsPage() {
       result = result.filter(log => log.customerName === selectedCustomer);
     }
     
-    if (selectedPartner !== 'all') {
-      result = result.filter(log => log.partnerName === selectedPartner);
+    if (selectedPartners.length > 0) {
+      result = result.filter(log => selectedPartners.includes(log.partnerName));
     }
 
     setFilteredLogs(result);
-  }, [searchTerm, selectedCustomer, selectedPartner, logs]);
+  }, [searchTerm, selectedCustomer, selectedPartners, logs]);
 
   const uniqueCustomers = Array.from(new Set(logs.map(l => l.customerName))).sort();
   const uniquePartners = Array.from(new Set(logs.map(l => l.partnerName))).sort();
@@ -200,13 +202,38 @@ export default function RevenueLogsPage() {
             
             <div className="space-y-2">
               <Label>Served By (Partner)</Label>
-              <Select value={selectedPartner} onValueChange={(v) => setSelectedPartner(v || '')}>
-                <SelectTrigger><SelectValue placeholder="All Partners" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Partners</SelectItem>
-                  {uniquePartners.map(p => <SelectItem key={p as string} value={p as string}>{p as string}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger
+                  className="w-full justify-start text-left font-normal h-10 border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border rounded-md"
+                >
+                  {selectedPartners.length === 0 
+                    ? "All Partners" 
+                    : `${selectedPartners.length} selected`}
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-2" align="start">
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {uniquePartners.map(p => (
+                      <div key={p as string} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`partner-${p}`}
+                          checked={selectedPartners.includes(p as string)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedPartners([...selectedPartners, p as string]);
+                            } else {
+                              setSelectedPartners(selectedPartners.filter(x => x !== p));
+                            }
+                          }}
+                        />
+                        <label htmlFor={`partner-${p}`} className="text-sm font-medium leading-none cursor-pointer">
+                          {p as string}
+                        </label>
+                      </div>
+                    ))}
+                    {uniquePartners.length === 0 && <div className="text-sm text-muted-foreground p-2">No partners found</div>}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </CardContent>
         </Card>

@@ -46,6 +46,7 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
     if (!selectedPlan || !user) return;
     
     let finalAmount = selectedPlan.price;
+
     if (paymentType === 'Partial') {
       if (!partialAmount || partialAmount <= 0) {
         toast.error("Please enter a valid partial amount");

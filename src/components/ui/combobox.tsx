@@ -30,9 +30,11 @@ interface ComboboxProps {
   onChange: (value: string) => void;
   placeholder?: string;
   emptyText?: string;
+  onAddNew?: () => void;
+  addNewText?: string;
 }
 
-export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No option found." }: ComboboxProps) {
+export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No option found.", onAddNew, addNewText }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -54,7 +56,16 @@ export function Combobox({ options, value, onChange, placeholder = "Select optio
         <Command>
           <CommandInput placeholder={`Search...`} />
           <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandEmpty>
+              <div className="flex flex-col items-center justify-center py-4 px-2">
+                <p className="text-sm text-muted-foreground mb-3">{emptyText}</p>
+                {onAddNew && (
+                  <Button variant="outline" size="sm" onClick={() => { setOpen(false); onAddNew(); }}>
+                    {addNewText || "Add New"}
+                  </Button>
+                )}
+              </div>
+            </CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem

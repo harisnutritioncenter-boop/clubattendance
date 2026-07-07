@@ -96,6 +96,7 @@ export class LedgerService {
     return newDoc.id;
   }
 
+
   static async getCustomerBalance(requestedCustomerId: string): Promise<CustomerMembershipStatus> {
     // 1. Resolve Family Account
     const family = await FamilyService.getFamilyForCustomer(requestedCustomerId);

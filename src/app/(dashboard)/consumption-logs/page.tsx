@@ -12,12 +12,16 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
-import { Search, Coffee, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Search, Coffee, Filter, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export default function ConsumptionLogsPage() {
   const globalBranchId = useBranchStore(state => state.activeBranchId);
   const authRole = useAuthStore(state => state.role);
+  const user = useAuthStore(state => state.user);
   
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<any[]>([]);
@@ -26,7 +30,7 @@ export default function ConsumptionLogsPage() {
   
   const [selectedClub, setSelectedClub] = useState<string>(globalBranchId || 'all');
   const [selectedCustomer, setSelectedCustomer] = useState('all');
-  const [selectedPartner, setSelectedPartner] = useState('all');
+  const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
   
   const [branches, setBranches] = useState<any[]>([]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -92,7 +96,7 @@ export default function ConsumptionLogsPage() {
       setLogs(formattedLogs);
       // reset secondary filters when data updates
       setSelectedCustomer('all');
-      setSelectedPartner('all');
+      setSelectedPartners([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -102,7 +106,30 @@ export default function ConsumptionLogsPage() {
 
   useEffect(() => {
     fetchLogs();
-  }, [selectedClub, startDate, endDate]);
+  }, [selectedClub, startDate, endDate, globalBranchId, authRole]);
+
+  const handleRevert = async (log: any) => {
+    if (authRole === 'junior_partner') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (log.createdAt < sevenDaysAgo) {
+        toast.error('Junior Partners can only revert consumptions within 7 days.');
+        return;
+      }
+    }
+
+    if (!confirm('Are you sure you want to revert this shake consumption? This will refund the shake.')) return;
+
+    try {
+      await LedgerService.voidConsumption(log.id, user?.uid || 'system');
+      toast.success('Consumption reverted successfully');
+      // Optimistic UI update
+      const newLogs = logs.filter(l => l.id !== log.id);
+      setLogs(newLogs);
+      // Let the useEffect handle re-filtering
+    } catch (error: any) {
+      toast.error('Failed to revert consumption: ' + error.message);
+    }
+  };
 
   useEffect(() => {
     let result = logs;
@@ -120,12 +147,12 @@ export default function ConsumptionLogsPage() {
       result = result.filter(log => log.customerName === selectedCustomer);
     }
     
-    if (selectedPartner !== 'all') {
-      result = result.filter(log => log.partnerName === selectedPartner);
+    if (selectedPartners.length > 0) {
+      result = result.filter(log => selectedPartners.includes(log.partnerName));
     }
 
     setFilteredLogs(result);
-  }, [searchTerm, selectedCustomer, selectedPartner, logs]);
+  }, [searchTerm, selectedCustomer, selectedPartners, logs]);
 
   const uniqueCustomers = Array.from(new Set(logs.map(l => l.customerName))).sort();
   const uniquePartners = Array.from(new Set(logs.map(l => l.partnerName))).sort();
@@ -200,13 +227,38 @@ export default function ConsumptionLogsPage() {
             
             <div className="space-y-2">
               <Label>Served By (Partner)</Label>
-              <Select value={selectedPartner} onValueChange={(v) => setSelectedPartner(v || '')}>
-                <SelectTrigger><SelectValue placeholder="All Partners" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Partners</SelectItem>
-                  {uniquePartners.map(p => <SelectItem key={p as string} value={p as string}>{p as string}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger
+                  className="w-full justify-start text-left font-normal h-10 border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border rounded-md"
+                >
+                  {selectedPartners.length === 0 
+                    ? "All Partners" 
+                    : `${selectedPartners.length} selected`}
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-2" align="start">
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {uniquePartners.map(p => (
+                      <div key={p as string} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`partner-${p}`}
+                          checked={selectedPartners.includes(p as string)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedPartners([...selectedPartners, p as string]);
+                            } else {
+                              setSelectedPartners(selectedPartners.filter(x => x !== p));
+                            }
+                          }}
+                        />
+                        <label htmlFor={`partner-${p}`} className="text-sm font-medium leading-none cursor-pointer">
+                          {p as string}
+                        </label>
+                      </div>
+                    ))}
+                    {uniquePartners.length === 0 && <div className="text-sm text-muted-foreground p-2">No partners found</div>}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </CardContent>
         </Card>
@@ -245,6 +297,7 @@ export default function ConsumptionLogsPage() {
                     <TableHead>Notes</TableHead>
                     <TableHead>Served By</TableHead>
                     <TableHead className="text-right">Deducted</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -257,6 +310,11 @@ export default function ConsumptionLogsPage() {
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{log.partnerName}</TableCell>
                       <TableCell className="text-right font-bold text-orange-600">
                         -{log.shakesDeducted}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRevert(log)} title="Revert Consumption">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -14,12 +14,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Calendar as CalendarIcon, CreditCard, User, Info, MapPin, Phone, Target, CalendarDays, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ArrowLeft, Calendar as CalendarIcon, CreditCard, User, Info, MapPin, Phone, Target, CalendarDays, ChevronLeft, ChevronRight, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateAge } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
+import { useAuthStore, useBranchStore } from '@/store';
 // Create a union type for the UI since we fetch from a single ledger collection in Firebase
 type LedgerEntry = (PaymentLedgerEntry | ShakeLedgerEntry) & { type?: string };
 
@@ -43,6 +44,9 @@ export default function CustomerProfilePage() {
   const [status, setStatus] = useState<CustomerMembershipStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const { user, role: authRole } = useAuthStore();
+  const branchId = useBranchStore(state => state.activeBranchId);
 
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -159,6 +163,35 @@ export default function CustomerProfilePage() {
     if (logs.length > 0) {
       setSelectedDateLogs(logs);
       setIsLogModalOpen(true);
+    }
+  };
+
+  const handleRevert = async (sLog: ShakeLedgerEntry) => {
+    if (authRole === 'junior_partner') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (sLog.createdAt < sevenDaysAgo) {
+        toast.error('Junior Partners can only revert consumptions within 7 days.');
+        return;
+      }
+    }
+
+    if (!confirm('Are you sure you want to revert this shake consumption?')) return;
+
+    try {
+      await LedgerService.voidConsumption(sLog.id!, user?.uid || 'system');
+      toast.success('Consumption reverted successfully');
+      setIsLogModalOpen(false);
+      
+      // Update ledger optimistically
+      setLedger(prev => prev.filter(l => l.id !== sLog.id));
+      if (status) {
+        setStatus({
+          ...status,
+          remainingShakes: status.remainingShakes + (sLog.shakesDeducted || 1)
+        });
+      }
+    } catch (error: any) {
+      toast.error('Failed to revert consumption: ' + error.message);
     }
   };
 
@@ -390,7 +423,12 @@ export default function CustomerProfilePage() {
               <div key={sLog.id || i} className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border">
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">{new Date(sLog.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  <Badge variant="outline">-{sLog.shakesDeducted || 1} Shake</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">-{sLog.shakesDeducted || 1} Shake</Badge>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRevert(sLog)} title="Revert Consumption">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="text-sm text-muted-foreground mt-2">
                   {sLog.notes || 'Consumed shake'}

@@ -269,13 +269,15 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Junior Partner</FormLabel>
-                <Combobox
-                  options={juniorPartners}
-                  value={field.value || ''}
-                  onChange={field.onChange}
-                  placeholder="Select Junior Partner"
-                />
-                <FormMessage />
+                <Combobox 
+                  options={juniorPartners} 
+                  value={field.value || ''} 
+                  onChange={field.onChange} 
+                  placeholder="Search Partner"
+                  emptyText="No partner found"
+                  onAddNew={() => window.open('/partners', '_blank')}
+                  addNewText="Add New Partner"
+                /><FormMessage />
               </FormItem>
             )}
           />
