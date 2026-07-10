@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Calendar as CalendarIcon, CreditCard, User, Info, MapPin, Phone, Target, CalendarDays, ChevronLeft, ChevronRight, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateAge } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 import { useAuthStore, useBranchStore } from '@/store';
@@ -54,6 +54,8 @@ export default function CustomerProfilePage() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
+  const [paymentToRevert, setPaymentToRevert] = useState<PaymentLedgerEntry | null>(null);
+  const [consumptionToRevert, setConsumptionToRevert] = useState<ShakeLedgerEntry | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -174,24 +176,64 @@ export default function CustomerProfilePage() {
         return;
       }
     }
+    setConsumptionToRevert(sLog);
+  };
 
-    if (!confirm('Are you sure you want to revert this shake consumption?')) return;
-
+  const confirmRevertConsumption = async () => {
+    if (!consumptionToRevert) return;
     try {
-      await LedgerService.voidConsumption(sLog.id!, user?.uid || 'system');
+      await LedgerService.voidConsumption(consumptionToRevert.id!, user?.uid || 'system');
       toast.success('Consumption reverted successfully');
       setIsLogModalOpen(false);
       
       // Update ledger optimistically
-      setLedger(prev => prev.filter(l => l.id !== sLog.id));
+      setLedger(prev => prev.filter(l => l.id !== consumptionToRevert.id));
       if (status) {
         setStatus({
           ...status,
-          remainingShakes: status.remainingShakes + (sLog.shakesDeducted || 1)
+          remainingShakes: status.remainingShakes + (consumptionToRevert.shakesDeducted || 1)
         });
       }
+      setConsumptionToRevert(null);
     } catch (error: any) {
       toast.error('Failed to revert consumption: ' + error.message);
+    }
+  };
+
+  const handleRevertPayment = async (pLog: PaymentLedgerEntry) => {
+    if (pLog.type !== 'Membership') {
+      toast.error('Only membership assignments can be reverted here.');
+      return;
+    }
+
+    if (authRole === 'junior_partner') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (pLog.createdAt < sevenDaysAgo) {
+        toast.error('Junior Partners can only revert assignments within 7 days.');
+        return;
+      }
+    }
+    setPaymentToRevert(pLog);
+  };
+
+  const confirmRevertPayment = async () => {
+    if (!paymentToRevert) return;
+    try {
+      await LedgerService.voidPayment(paymentToRevert.id!, user?.uid || 'system');
+      toast.success('Membership assignment reverted successfully');
+      
+      // Update ledger optimistically
+      setLedger(prev => prev.filter(l => l.id !== paymentToRevert.id));
+      if (status) {
+        setStatus({
+          ...status,
+          remainingShakes: status.remainingShakes - (paymentToRevert.shakesAdded || 0),
+          remainingBalance: status.remainingBalance - (paymentToRevert.remainingBalance || 0)
+        });
+      }
+      setPaymentToRevert(null);
+    } catch (error: any) {
+      toast.error('Failed to revert assignment: ' + error.message);
     }
   };
 
@@ -374,9 +416,10 @@ export default function CustomerProfilePage() {
                     <tr className="border-b bg-muted/50 text-left font-medium text-muted-foreground">
                       <th className="p-4">Date</th>
                       <th className="p-4">Type</th>
-                      <th className="p-4">Amount</th>
-                      <th className="p-4">Method</th>
-                      <th className="p-4">Notes</th>
+                      <th className="p-4 text-left font-medium text-muted-foreground w-32">Amount</th>
+                      <th className="p-4 text-left font-medium text-muted-foreground">Method</th>
+                      <th className="p-4 text-left font-medium text-muted-foreground">Notes</th>
+                      <th className="p-4 w-[50px]"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -396,11 +439,24 @@ export default function CustomerProfilePage() {
                         </td>
                         <td className="p-4">{pEntry.paymentMethod || '-'}</td>
                         <td className="p-4 text-muted-foreground text-xs max-w-xs truncate" title={pEntry.notes}>{pEntry.notes || '-'}</td>
+                        <td className="p-4">
+                          {pEntry.type === 'Membership' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleRevertPayment(pEntry)}
+                              title="Void Membership"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </td>
                       </tr>
                     )})}
                     {ledger.filter(l => l.type === 'Membership' || l.type === 'Debt Collection' || l.type === 'Add Shakes').length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-muted-foreground">No financial transactions found.</td>
+                        <td colSpan={6} className="p-8 text-center text-muted-foreground">No financial transactions found.</td>
                       </tr>
                     )}
                   </tbody>
@@ -464,11 +520,53 @@ export default function CustomerProfilePage() {
           customerId={customer.id}
           customerName={customer.name}
           amountDue={status.remainingBalance}
-          onSuccess={() => {
-            window.location.reload();
-          }}
+          onSuccess={() => window.location.reload()}
         />
       )}
+
+      {/* Styled Dialog for Reverting Consumption */}
+      <Dialog open={!!consumptionToRevert} onOpenChange={(open) => !open && setConsumptionToRevert(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Revert Shake Consumption
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-base">
+              Are you sure you want to revert the <strong>{consumptionToRevert?.shakesDeducted || 1} shake(s)</strong> consumed on {consumptionToRevert ? new Date(consumptionToRevert.createdAt).toLocaleString() : ''}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
+            This will restore the shake(s) back to the customer's balance.
+          </div>
+          <DialogFooter className="sm:justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setConsumptionToRevert(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmRevertConsumption}>Yes, Revert Consumption</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Styled Dialog for Reverting Membership */}
+      <Dialog open={!!paymentToRevert} onOpenChange={(open) => !open && setPaymentToRevert(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Void Membership Assignment
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-base">
+              Are you sure you want to void the <span className="font-semibold text-foreground">{paymentToRevert?.planName || 'Membership'}</span> assignment for <span className="font-semibold text-foreground">{customer?.name}</span>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
+            This will logically refund the <strong>₹{paymentToRevert?.amount?.toLocaleString()}</strong> payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative.
+          </div>
+          <DialogFooter className="sm:justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setPaymentToRevert(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmRevertPayment}>Yes, Void Assignment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

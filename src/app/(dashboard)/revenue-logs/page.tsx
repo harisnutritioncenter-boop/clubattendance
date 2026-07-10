@@ -12,14 +12,17 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, IndianRupee, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, IndianRupee, Filter, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export default function RevenueLogsPage() {
   const globalBranchId = useBranchStore(state => state.activeBranchId);
   const authRole = useAuthStore(state => state.role);
+  const user = useAuthStore(state => state.user);
   
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<any[]>([]);
@@ -32,6 +35,7 @@ export default function RevenueLogsPage() {
   
   const [branches, setBranches] = useState<any[]>([]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [logToRevert, setLogToRevert] = useState<any>(null);
 
   // Default to current month
   const today = new Date();
@@ -99,6 +103,37 @@ export default function RevenueLogsPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRevert = async (log: any) => {
+    if (log.type !== 'Membership') {
+      toast.error('Only membership payments can be reverted here.');
+      return;
+    }
+
+    if (authRole === 'junior_partner') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (log.createdAt < sevenDaysAgo) {
+        toast.error('Junior Partners can only revert assignments within 7 days.');
+        return;
+      }
+    }
+
+    setLogToRevert(log);
+  };
+
+  const confirmRevert = async () => {
+    if (!logToRevert) return;
+    try {
+      await LedgerService.voidPayment(logToRevert.id, user?.uid || 'system');
+      toast.success('Membership assignment reverted successfully');
+      // Optimistic UI update
+      const newLogs = logs.filter(l => l.id !== logToRevert.id);
+      setLogs(newLogs);
+      setLogToRevert(null);
+    } catch (error: any) {
+      toast.error('Failed to revert assignment: ' + error.message);
     }
   };
 
@@ -272,6 +307,7 @@ export default function RevenueLogsPage() {
                     <TableHead>Method</TableHead>
                     <TableHead>Partner</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -285,6 +321,19 @@ export default function RevenueLogsPage() {
                       <TableCell className="text-right font-bold text-green-600">
                         ₹{log.amount?.toLocaleString()}
                       </TableCell>
+                      <TableCell>
+                        {log.type === 'Membership' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRevert(log)}
+                            title="Void Membership"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -293,6 +342,27 @@ export default function RevenueLogsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!logToRevert} onOpenChange={(open) => !open && setLogToRevert(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Void Membership Assignment
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-base">
+              Are you sure you want to void the <span className="font-semibold text-foreground">{logToRevert?.planName || 'Membership'}</span> assignment for <span className="font-semibold text-foreground">{logToRevert?.customerName}</span>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
+            This will logically refund the <strong>₹{logToRevert?.amount?.toLocaleString()}</strong> payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative.
+          </div>
+          <DialogFooter className="sm:justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setLogToRevert(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmRevert}>Yes, Void Assignment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

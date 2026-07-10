@@ -291,6 +291,15 @@ export class LedgerService {
       updatedAt: Date.now(),
       voidedBy
     });
+
+    ActivityLogsService.logActivity(
+      'REVERT',
+      'Payment',
+      paymentId,
+      `Voided/Refunded payment of ₹${data.amount} for plan: ${data.planName || 'Unknown'}`,
+      voidedBy,
+      data.branchId
+    );
   }
   static async revertConsumption(consumptionId: string, revertedBy: string): Promise<void> {
     const docRef = doc(COLLECTIONS.SHAKE_LEDGER, consumptionId);

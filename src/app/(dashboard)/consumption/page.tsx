@@ -228,27 +228,6 @@ export default function ConsumptionPage() {
           ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
               
-              {/* Partner Info Banner */}
-              <div className="bg-muted p-3 rounded-md flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Assigned Partner: <span className="text-primary">{assignedPartnerName}</span></p>
-                  {assignedPartnerInventory !== null && (
-                    <p className={`text-xs ${assignedPartnerInventory <= 10 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
-                      Partner Inventory: {assignedPartnerInventory} shakes remaining
-                    </p>
-                  )}
-                </div>
-                {role !== 'junior_partner' && assignedPartnerId && assignedPartnerInventory !== null && assignedPartnerInventory <= 10 && (
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="gap-1 border-destructive text-destructive hover:bg-destructive/10"
-                    onClick={() => setIsAddShakesModalOpen(true)}
-                  >
-                    <AlertTriangle className="h-4 w-4" /> Add Inventory
-                  </Button>
-                )}
-              </div>
 
               {/* Customer Name */}
               <div className="text-center mb-6">
@@ -322,6 +301,28 @@ export default function ConsumptionPage() {
                   )}
                 </div>
               )}
+
+              {/* Partner Info Banner */}
+              <div className="bg-muted p-3 rounded-md flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-sm font-medium">Assigned Partner: <span className="text-primary">{assignedPartnerName}</span></p>
+                  {assignedPartnerInventory !== null && (
+                    <p className={`text-xs ${assignedPartnerInventory <= 10 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
+                      Partner Inventory: {assignedPartnerInventory} shakes remaining
+                    </p>
+                  )}
+                </div>
+                {role !== 'junior_partner' && assignedPartnerId && assignedPartnerInventory !== null && assignedPartnerInventory <= 10 && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="gap-1 border-destructive text-destructive hover:bg-destructive/10"
+                    onClick={() => setIsAddShakesModalOpen(true)}
+                  >
+                    <AlertTriangle className="h-4 w-4" /> Add Inventory
+                  </Button>
+                )}
+              </div>
 
               {/* Balance Status */}
               <div className="text-center">

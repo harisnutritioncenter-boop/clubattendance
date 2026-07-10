@@ -186,6 +186,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
           const payload: any = {
             customerId,
             amount: values.amountPaid || 0,
+            totalPlanCost: plan.price,
             type: 'Membership',
             planName: plan.name,
             paymentMethod: (values.paymentMethod as any) || 'Cash',
@@ -195,7 +196,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
             createdAt: pDate.getTime(),
             notes: `Offline Migration: ${plan.name}. Started on ${values.startDate}`
           };
-          if (plan.shakes !== undefined) payload.shakesAdded = plan.shakes;
+          if (plan.shakesCount !== undefined) payload.shakesAdded = plan.shakesCount;
           if (plan.validityDays !== undefined) payload.validityDays = plan.validityDays;
 
           await LedgerService.addPayment(payload);

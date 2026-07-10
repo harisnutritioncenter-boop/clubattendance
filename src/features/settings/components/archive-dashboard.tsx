@@ -19,6 +19,24 @@ export function ArchiveDashboard() {
   const [archivedData, setArchivedData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const user = useAuthStore(state => state.user);
+  const [customerMap, setCustomerMap] = useState<Record<string, {name: string, displayId: string}>>({});
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const snap = await getDocs(COLLECTIONS.CUSTOMERS);
+        const map: Record<string, {name: string, displayId: string}> = {};
+        snap.docs.forEach(d => {
+          const data = d.data();
+          map[d.id] = { name: data.name, displayId: data.displayId };
+        });
+        setCustomerMap(map);
+      } catch (err) {
+        console.error('Failed to fetch customer map', err);
+      }
+    };
+    fetchCustomers();
+  }, []);
 
   const fetchArchivedData = async () => {
     setLoading(true);
@@ -92,38 +110,83 @@ export function ArchiveDashboard() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Details</TableHead>
-                  <TableHead>Date Deleted</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                  <TableHead>Record</TableHead>
+                  <TableHead className="hidden sm:table-cell">Date Deleted</TableHead>
+                  <TableHead className="text-right w-[100px]">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground animate-pulse">
+                    <TableCell colSpan={3} className="text-center py-8 text-muted-foreground animate-pulse">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : archivedData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
                       No archived records found.
                     </TableCell>
                   </TableRow>
                 ) : (
                   archivedData.map(item => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs">{item.id.slice(0, 8)}...</TableCell>
                       <TableCell>
-                        {activeTab === 'customers' && (item.name || item.mobile)}
-                        {activeTab === 'partners' && (item.name || item.email)}
-                        {activeTab === 'consumptions' && `${item.consumedBy} - ${item.shakesDeducted} shakes`}
-                        {activeTab === 'payments' && `₹${item.amount} for ${item.planName || 'Custom'}`}
+                        {activeTab === 'customers' && (
+                          <>
+                            <div className="font-bold text-sm sm:text-base text-primary">
+                              {item.displayId || 'No ID'}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">
+                              {item.name || item.mobile || 'Unknown'}
+                            </div>
+                          </>
+                        )}
+                        {activeTab === 'partners' && (
+                          <>
+                            <div className="font-bold text-sm sm:text-base">
+                              {item.name || 'Unknown Partner'}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">
+                              {item.email || item.mobile || 'No details'}
+                            </div>
+                          </>
+                        )}
+                        {activeTab === 'consumptions' && (
+                          <>
+                            <div className="font-bold text-sm sm:text-base text-primary">
+                              {customerMap[item.customerId]?.displayId || 'No ID'}
+                            </div>
+                            <div className="text-sm text-foreground font-medium mt-0.5">
+                              {customerMap[item.customerId]?.name || 'Unknown Customer'}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">
+                              Consumed: {item.shakesDeducted || 1} shake(s) ({item.consumedBy})
+                            </div>
+                          </>
+                        )}
+                        {activeTab === 'payments' && (
+                          <>
+                            <div className="font-bold text-sm sm:text-base text-primary">
+                              {customerMap[item.customerId]?.displayId || 'No ID'}
+                            </div>
+                            <div className="text-sm text-foreground font-medium mt-0.5">
+                              {customerMap[item.customerId]?.name || 'Unknown Customer'} <span className="text-green-600 font-bold ml-1">₹{item.amount || 0}</span>
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">
+                              Plan: {item.planName || 'Custom'}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px] sm:max-w-xs" title={item.notes}>
+                              {item.notes || 'No notes'}
+                            </div>
+                          </>
+                        )}
                       </TableCell>
-                      <TableCell>{new Date(item.updatedAt || item.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
+                        {new Date(item.updatedAt || item.createdAt).toLocaleDateString()}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="outline" onClick={() => handleRevert(item.id)}>
+                        <Button size="sm" variant="outline" onClick={() => handleRevert(item.id)} className="w-full sm:w-auto">
                           Revert
                         </Button>
                       </TableCell>
