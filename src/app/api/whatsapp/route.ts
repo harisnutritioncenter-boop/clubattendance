@@ -19,6 +19,13 @@ export async function POST(request: Request) {
     // Strip non-numeric characters from mobile just in case
     let cleanMobile = mobile.replace(/\D/g, '');
 
+    // Ensure mobile has country code (assuming India +91 for this specific implementation)
+    // If it's exactly 10 digits, prepend 91.
+    let formattedMobile = cleanMobile;
+    if (cleanMobile.length === 10) {
+      formattedMobile = `91${cleanMobile}`;
+    }
+
     // Send the raw data directly to the WASimple Flow Webhook!
     // The WASimple Flow will catch this JSON and map it to the template parameters.
     const requestOptions: RequestInit = {
@@ -27,7 +34,7 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        number: cleanMobile,
+        number: formattedMobile,
         name: name,
         date: date,
         time: time,
