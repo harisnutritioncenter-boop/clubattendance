@@ -181,7 +181,9 @@ export default function TrialsPage() {
                 <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Partner</label>
                 <Select value={filterJp} onValueChange={(val) => setFilterJp(val || 'all')}>
                   <SelectTrigger className="h-8 text-xs px-2">
-                    <SelectValue placeholder="Partner" />
+                    <SelectValue placeholder="Partner">
+                      {filterJp === 'all' ? 'All' : (partners[filterJp] ? partners[filterJp].split(' ')[0] : 'Partner')}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
@@ -197,7 +199,11 @@ export default function TrialsPage() {
               <div className="min-w-0">
                 <label className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 block truncate">Club</label>
                 <Select value={filterClub} onValueChange={(val) => setFilterClub(val || 'all')}>
-                  <SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="Club" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs px-2">
+                    <SelectValue placeholder="Club">
+                      {filterClub === 'all' ? 'All' : (clubs[filterClub] ? clubs[filterClub].split(' ')[0] : 'Club')}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
                     {Object.entries(clubs).map(([id, name]) => (
