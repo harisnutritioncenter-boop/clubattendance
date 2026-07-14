@@ -203,7 +203,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
         }
       }
 
-      // 3. Log Consumption Ledger entry (Served Shakes)
+      // 3. Log Consumption Ledger entry (Attendances Marked)
       if (values.servedShakesTillDate && values.servedShakesTillDate > 0) {
         await LedgerService.addConsumption({
           shakesDeducted: values.servedShakesTillDate,
@@ -388,7 +388,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
               name="servedShakesTillDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Shakes Served Till Date</FormLabel>
+                  <FormLabel>Attendances Marked Till Date</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" {...field} />
                   </FormControl>
@@ -501,6 +501,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                       <SelectContent>
                         <SelectItem value="Cash">Cash</SelectItem>
                         <SelectItem value="UPI">UPI</SelectItem>
+                        <SelectItem value="Due">Due</SelectItem>
                         <SelectItem value="Card">Card</SelectItem>
                         <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
                       </SelectContent>

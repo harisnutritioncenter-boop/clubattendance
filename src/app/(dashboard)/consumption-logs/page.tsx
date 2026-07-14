@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Coffee, Filter, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 
 export default function ConsumptionLogsPage() {
   const globalBranchId = useBranchStore(state => state.activeBranchId);
@@ -80,17 +80,17 @@ export default function ConsumptionLogsPage() {
       });
 
       let formattedLogs = consumptions.map(c => {
-        const partnerId = customerPartnerMap[c.customerId] || c.createdBy;
+        const partnerId = c.createdBy;
         return {
           ...c,
           customerName: customerMap[c.customerId] || 'Unknown Customer',
-          partnerName: userMap[partnerId] || 'Unknown Partner'
+          partnerName: userMap[partnerId] || 'Admin'
         };
       });
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(c => c.createdBy === user.uid);
+        formattedLogs = formattedLogs.filter(c => customerPartnerMap[c.customerId] === user.uid);
       }
 
       setLogs(formattedLogs);
@@ -168,11 +168,11 @@ export default function ConsumptionLogsPage() {
       </div>
 
       <div className="flex flex-col md:flex-row gap-4">
-        {/* Total Served Card - smaller on mobile, prominent on desktop */}
+        {/* Total Attendances Card - smaller on mobile, prominent on desktop */}
         <Card className="bg-primary text-primary-foreground flex flex-row md:flex-col justify-between md:justify-center items-center p-4 md:p-6 md:w-64 shrink-0 shadow-md">
           <div className="flex items-center gap-3 md:flex-col md:mb-2">
             <Coffee className="w-6 h-6 md:w-8 md:h-8 opacity-80" />
-            <p className="text-sm md:text-base font-medium opacity-90">Total Served</p>
+            <p className="text-sm md:text-base font-medium opacity-90">Total Attendances</p>
           </div>
           <p className="text-2xl md:text-4xl font-bold">{totalShakes.toLocaleString()}</p>
         </Card>
@@ -226,7 +226,7 @@ export default function ConsumptionLogsPage() {
             </div>
             
             <div className="space-y-2">
-              <Label>Served By (Partner)</Label>
+              <Label>Marked By (Partner)</Label>
               <Popover>
                 <PopoverTrigger
                   className="w-full justify-start text-left font-normal h-10 border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border rounded-md"
@@ -295,7 +295,7 @@ export default function ConsumptionLogsPage() {
                     <TableHead>Primary Customer</TableHead>
                     <TableHead>Consumed By</TableHead>
                     <TableHead>Notes</TableHead>
-                    <TableHead>Served By</TableHead>
+                    <TableHead>Marked By</TableHead>
                     <TableHead className="text-right">Deducted</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -303,7 +303,7 @@ export default function ConsumptionLogsPage() {
                 <TableBody>
                   {filteredLogs.map((log) => (
                     <TableRow key={log.id}>
-                      <TableCell className="whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDateTime(log.createdAt)}</TableCell>
                       <TableCell className="font-medium whitespace-nowrap">{log.customerName}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.consumedBy || '-'}</TableCell>
                       <TableCell className="max-w-[150px] sm:max-w-[200px] truncate" title={log.notes}>{log.notes || '-'}</TableCell>

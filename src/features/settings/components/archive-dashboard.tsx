@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { formatDate } from '@/lib/utils';
 import { getDocs, query, where } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { CustomerService } from '@/features/customers/services/customer.service';
@@ -183,7 +184,7 @@ export function ArchiveDashboard() {
                         )}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                        {new Date(item.updatedAt || item.createdAt).toLocaleDateString()}
+                        {formatDate(item.updatedAt || item.createdAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button size="sm" variant="outline" onClick={() => handleRevert(item.id)} className="w-full sm:w-auto">

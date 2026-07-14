@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MembershipPlan, PlanEditRecord } from '../types/membership.types';
 import { MembershipService } from '../services/membership.service';
+import { formatDateTime } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -9,8 +10,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store';
@@ -31,6 +33,7 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
   const [price, setPrice] = useState('');
   const [shakesCount, setShakesCount] = useState('');
   const [validityDays, setValidityDays] = useState('');
+  const [isTrialPlan, setIsTrialPlan] = useState(false);
 
   if (!plan) return null;
 
@@ -39,6 +42,7 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
     setPrice(plan.price.toString());
     setShakesCount(plan.shakesCount.toString());
     setValidityDays(plan.validityDays.toString());
+    setIsTrialPlan(plan.isTrialPlan || false);
     setIsEditing(true);
   };
 
@@ -56,6 +60,7 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
       if (newPrice !== plan.price) changes.push({ field: 'price', oldValue: plan.price, newValue: newPrice });
       if (newShakes !== plan.shakesCount) changes.push({ field: 'shakesCount', oldValue: plan.shakesCount, newValue: newShakes });
       if (newDays !== plan.validityDays) changes.push({ field: 'validityDays', oldValue: plan.validityDays, newValue: newDays });
+      if (isTrialPlan !== (plan.isTrialPlan || false)) changes.push({ field: 'isTrialPlan', oldValue: plan.isTrialPlan || false, newValue: isTrialPlan });
 
       if (changes.length === 0) {
         setIsEditing(false);
@@ -73,6 +78,7 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
         price: newPrice,
         shakesCount: newShakes,
         validityDays: newDays,
+        isTrialPlan,
         editHistory: [...(plan.editHistory || []), newRecord]
       });
 
@@ -141,6 +147,16 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
               <Label htmlFor="days">Validity (Days)</Label>
               <Input id="days" type="number" value={validityDays} onChange={e => setValidityDays(e.target.value)} required />
             </div>
+            <div className="flex items-center space-x-2 pt-2">
+              <Checkbox 
+                id="editIsTrialPlan" 
+                checked={isTrialPlan} 
+                onCheckedChange={(checked) => setIsTrialPlan(checked === true)} 
+              />
+              <Label htmlFor="editIsTrialPlan" className="text-sm font-medium leading-none">
+                Make it for Trials
+              </Label>
+            </div>
             <DialogFooter className="mt-4 gap-2 flex-col sm:flex-row">
               <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
               <Button type="submit">Save Changes</Button>
@@ -152,6 +168,19 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
               <div>
                 <p className="text-xs text-muted-foreground">Plan Name</p>
                 <p className="font-semibold text-lg">{plan.name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Status & Type</p>
+                <div className="flex gap-2">
+                  <Badge variant={plan.isActive ? 'default' : 'destructive'}>
+                    {plan.isActive ? 'Active' : 'Paused'}
+                  </Badge>
+                  {plan.isTrialPlan && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                      Trial Plan
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Price</p>
@@ -179,7 +208,7 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
                     <div key={idx} className="border rounded-md p-3 bg-card shadow-sm text-sm">
                       <div className="flex justify-between items-start mb-2 border-b pb-2">
                         <span className="font-medium text-xs text-muted-foreground">
-                          Edited on {new Date(record.editedAt).toLocaleString()}
+                          Edited on {formatDateTime(record.editedAt)}
                         </span>
                       </div>
                       <ul className="space-y-1">

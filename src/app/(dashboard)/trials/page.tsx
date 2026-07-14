@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
+import { ContactActions } from '@/components/ui/contact-actions';
+import { formatDate } from '@/lib/utils';
 import { AssignMembershipModal } from '@/features/memberships/components/assign-membership-modal';
 import { Plus, UserCheck, SlidersHorizontal } from 'lucide-react';
 import { getDocs, query, where, orderBy } from 'firebase/firestore';
@@ -71,7 +73,13 @@ export default function TrialsPage() {
         setClubs(clubMap);
       }
       
-      setTrials(customers.filter(c => c.isTrial === true || c.wasTrial === true));
+      let trialsList = customers.filter(c => c.isTrial === true || c.wasTrial === true);
+      
+      if (role === 'junior_partner' && useAuthStore.getState().user) {
+        trialsList = trialsList.filter(c => c.juniorPartnerId === useAuthStore.getState().user!.uid);
+      }
+
+      setTrials(trialsList);
     } catch (err) {
       console.error(err);
     } finally {
@@ -244,13 +252,16 @@ export default function TrialsPage() {
                     >
                       <TableCell>
                         <div className="font-medium">{c.name}</div>
-                        <div className="text-xs text-muted-foreground">{c.displayId} | {c.mobile}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                          <span>{c.displayId} | {c.mobile}</span>
+                          <ContactActions mobile={c.mobile} />
+                        </div>
                       </TableCell>
                       <TableCell>
                         {c.purpose.length > 0 ? c.purpose.join(', ') : '-'}
                       </TableCell>
                       <TableCell>
-                        {new Date(c.createdAt).toLocaleDateString()}
+                        {formatDate(c.createdAt)}
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         {c.isTrial ? (
@@ -265,7 +276,7 @@ export default function TrialsPage() {
                           </Button>
                         ) : c.trialConvertedAt ? (
                           <div className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full inline-block">
-                            Converted on {new Date(c.trialConvertedAt).toLocaleDateString()}
+                            Converted on {formatDate(c.trialConvertedAt)}
                           </div>
                         ) : (
                           <div className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full inline-block">

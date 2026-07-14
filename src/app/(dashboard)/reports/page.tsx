@@ -8,6 +8,7 @@ import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { useBranchStore, useAuthStore } from '@/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { formatDate, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,7 +46,7 @@ export default function ReportsPage() {
         'HC-ID': c.displayId || '-',
         'Name': c.name,
         'Mobile': c.mobile,
-        'Joined Date': new Date(c.createdAt).toLocaleDateString()
+        'Joined Date': formatDate(c.createdAt)
       }));
 
       downloadExcel(data, 'Customer_Master_Report');
@@ -96,14 +97,14 @@ export default function ReportsPage() {
       }
       
       const data = payments.map(p => ({
-        'Date': new Date(p.createdAt).toLocaleString(),
+        'Date': formatDateTime(p.createdAt),
         'Customer ID': customerMap[p.customerId] || p.customerId,
         'Type': p.type,
         'Plan Name': p.planName || '-',
         'Payment Method': p.paymentMethod,
         'Amount (₹)': p.amount,
         'Shakes Added': p.shakesAdded || 0,
-        'Served By': userMap[p.createdBy] || p.createdBy
+        'Marked By': userMap[p.createdBy] || p.createdBy
       }));
 
       downloadExcel(data, 'Sales_Revenue_Report');
@@ -134,12 +135,12 @@ export default function ReportsPage() {
       }
       
       const data = consumptions.map(c => ({
-        'Date & Time': new Date(c.createdAt).toLocaleString(),
+        'Date & Time': formatDateTime(c.createdAt),
         'Customer': customerMap[c.customerId] || c.customerId,
         'Consumed By': c.consumedBy,
         'Shakes Deducted': c.shakesDeducted,
         'Notes': c.notes || '-',
-        'Served By': userMap[c.createdBy] || c.createdBy
+        'Marked By': userMap[c.createdBy] || c.createdBy
       }));
 
       downloadExcel(data, 'Consumption_Log_Report');
@@ -175,7 +176,7 @@ export default function ReportsPage() {
             'Mobile': c.mobile,
             'Last Plan': balance.latestPlanName || '-',
             'Shakes Remaining': balance.remainingShakes,
-            'Expiry Date': balance.validUntil ? new Date(balance.validUntil).toLocaleDateString() : '-',
+            'Expiry Date': balance.validUntil ? formatDate(balance.validUntil) : '-',
             'Status': balance.isExpired ? 'Expired' : `Expiring in ${daysLeft} days`
           });
         }
@@ -255,7 +256,7 @@ export default function ReportsPage() {
               <Coffee className="w-5 h-5 text-orange-500" />
               Consumption Log
             </CardTitle>
-            <CardDescription>Every shake served and recorded within the selected date range.</CardDescription>
+            <CardDescription>Every attendance marked and recorded within the selected date range.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={handleConsumptionLog} disabled={loading} className="w-full">

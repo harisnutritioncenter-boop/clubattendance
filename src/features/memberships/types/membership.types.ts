@@ -16,6 +16,7 @@ export interface MembershipPlan {
   validityDays: number;
   isActive: boolean;
   isArchived?: boolean;
+  isTrialPlan?: boolean;
   createdAt: number;
   editHistory?: PlanEditRecord[];
 }

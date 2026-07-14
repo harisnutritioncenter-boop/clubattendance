@@ -29,7 +29,7 @@ const baseSchema = z.object({
   // Payment fields (shared)
   amountPaid: z.coerce.number().min(0, 'Cannot be negative').optional(),
   customPlanPrice: z.coerce.number().min(0, 'Cannot be negative').optional(),
-  paymentMethod: z.string().optional(),
+  paymentMethod: z.enum(['Cash', 'Card', 'UPI', 'Bank Transfer', 'Due']).optional(),
   paymentDate: z.string().optional(),
 });
 
@@ -53,7 +53,7 @@ export const offlineMigrationSchema = baseSchema.superRefine((data, ctx) => {
     if (data.servedShakesTillDate === undefined || data.servedShakesTillDate < 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Served shakes is required",
+        message: "Attendances marked is required",
         path: ['servedShakesTillDate'],
       });
     }
@@ -117,7 +117,7 @@ export const offlineMigrationSchema = baseSchema.superRefine((data, ctx) => {
     if (data.servedShakesTillDate === undefined || data.servedShakesTillDate < 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Served shakes is required",
+        message: "Attendances marked is required",
         path: ['servedShakesTillDate'],
       });
     }

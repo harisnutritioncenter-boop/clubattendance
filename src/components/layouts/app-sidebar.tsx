@@ -38,7 +38,7 @@ export function AppSidebar() {
 
   const adminItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-    { title: 'Serve Shakes', url: '/consumption', icon: Coffee },
+    { title: 'Attendance', url: '/consumption', icon: Coffee },
     { title: 'Partners', url: '/partners', icon: UserCheck },
     { title: 'Trials', url: '/trials', icon: UserCheck },
     { title: 'Customers', url: '/customers', icon: Users },
@@ -60,7 +60,7 @@ export function AppSidebar() {
 
   const juniorItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-    { title: 'Serve Shakes', url: '/consumption', icon: Coffee },
+    { title: 'Attendance', url: '/consumption', icon: Coffee },
     { title: 'Trials', url: '/trials', icon: UserCheck },
     { title: 'Customers', url: '/customers', icon: Users },
     { title: 'Memberships', url: '/memberships', icon: CalendarHeart },

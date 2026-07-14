@@ -1,4 +1,4 @@
-export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Bank Transfer';
+export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Bank Transfer' | 'Due';
 export type PaymentType = 'Membership' | 'Retail' | 'Other' | 'Debt Collection';
 
 export interface PaymentLedgerEntry {

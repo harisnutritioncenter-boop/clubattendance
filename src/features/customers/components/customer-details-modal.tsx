@@ -1,8 +1,10 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Customer } from '../types/customer.types';
 import { CustomerMembershipStatus } from '@/features/memberships/types/membership.types';
+import { ContactActions } from '@/components/ui/contact-actions';
 import { Button } from '@/components/ui/button';
-import { CalendarHeart, ClipboardList, MapPin, Phone, UserCircle, Target, FileText, AlertTriangle, ExternalLink } from 'lucide-react';
+import { CalendarHeart, ClipboardList, Phone, UserCircle, Target, FileText, AlertTriangle, ExternalLink } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useRouter } from 'next/navigation';
 
@@ -35,7 +37,7 @@ export function CustomerDetailsModal({
 
   const isExpired = balance?.isExpired;
   const expiryText = balance?.validUntil 
-    ? new Date(balance.validUntil).toLocaleDateString() 
+    ? formatDate(balance.validUntil) 
     : 'No Active Plan';
 
   return (
@@ -47,7 +49,7 @@ export function CustomerDetailsModal({
             {customer.name}
           </DialogTitle>
           <DialogDescription>
-            {customer.displayId} • Joined {new Date(customer.createdAt).toLocaleDateString()}
+            {customer.displayId} • Joined {formatDate(customer.createdAt)}
           </DialogDescription>
         </DialogHeader>
 
@@ -61,7 +63,10 @@ export function CustomerDetailsModal({
               </h4>
               <div className="grid grid-cols-2 gap-2 text-sm bg-secondary/50 p-3 rounded-lg">
                 <div className="font-medium">Mobile:</div>
-                <div>{customer.mobile}</div>
+                <div className="flex items-center gap-2">
+                  <span>{customer.mobile}</span>
+                  <ContactActions mobile={customer.mobile} />
+                </div>
                 <div className="font-medium">Locality:</div>
                 <div>{customer.locality || 'Not provided'}</div>
                 <div className="font-medium">Address:</div>

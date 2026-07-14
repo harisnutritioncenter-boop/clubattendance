@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AssignMembershipModal } from '@/features/memberships/components/assign-membership-modal';
+import { ContactActions } from '@/components/ui/contact-actions';
 
 export default function RenewalsPage() {
   const branchId = useBranchStore(state => state.activeBranchId);
@@ -26,7 +27,7 @@ export default function RenewalsPage() {
         
         const authState = useAuthStore.getState();
         if (authState.role === 'junior_partner') {
-          customers = customers.filter(c => c.createdBy === authState.user?.uid);
+          customers = customers.filter(c => c.juniorPartnerId === authState.user?.uid);
         }
         
         const data = [];
@@ -93,7 +94,10 @@ export default function RenewalsPage() {
                   <TableRow key={c.id}>
                     <TableCell>
                       <div className="font-medium">{c.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.displayId} | {c.mobile}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        <span>{c.displayId} | {c.mobile}</span>
+                        <ContactActions mobile={c.mobile} />
+                      </div>
                     </TableCell>
                     <TableCell>{c.planName}</TableCell>
                     <TableCell className="text-right font-medium">{c.remainingShakes}</TableCell>

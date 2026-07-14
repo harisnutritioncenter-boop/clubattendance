@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Activity, Coffee, CreditCard, UserPlus, Clock, Database, CheckSquare, Settings, DollarSign, Edit, UserMinus } from 'lucide-react';
 import { ActivityLog, ActivityAction, EntityType } from '@/features/activity-logs/types/activity.types';
+import { formatDateTime } from '@/lib/utils';
 
 export default function LogsPage() {
   const { role } = useAuthStore();
@@ -165,7 +166,7 @@ export default function LogsPage() {
                       <p className="font-medium text-sm">{log.action} {getEntityLabel(log.entityType)}</p>
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        {new Date(log.createdAt).toLocaleString()}
+                        {formatDateTime(log.createdAt)}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">{log.details}</p>

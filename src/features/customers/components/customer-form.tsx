@@ -412,6 +412,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
                         <SelectContent>
                           <SelectItem value="Cash">Cash</SelectItem>
                           <SelectItem value="UPI">UPI</SelectItem>
+                          <SelectItem value="Due">Due</SelectItem>
                           <SelectItem value="Card">Card</SelectItem>
                           <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
                         </SelectContent>

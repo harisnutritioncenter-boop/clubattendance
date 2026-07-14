@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/layouts/app-sidebar"
 import { GlobalRefreshButton } from "@/components/shared/global-refresh-button"
+import { MobileBottomBar } from "@/components/layouts/mobile-bottom-bar"
 
 export default function DashboardLayout({
   children,
@@ -15,10 +16,11 @@ export default function DashboardLayout({
           <SidebarTrigger />
           <GlobalRefreshButton />
         </div>
-        <div className="p-4 lg:p-8">
+        <div className="p-4 lg:p-8 pb-20 md:pb-8">
           {children}
         </div>
       </main>
+      <MobileBottomBar />
     </SidebarProvider>
   )
 }

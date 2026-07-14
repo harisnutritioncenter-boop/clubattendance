@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, IndianRupee, Filter, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 
 export default function RevenueLogsPage() {
   const globalBranchId = useBranchStore(state => state.activeBranchId);
@@ -82,17 +82,17 @@ export default function RevenueLogsPage() {
       });
 
       let formattedLogs = payments.map(p => {
-        const partnerId = customerPartnerMap[p.customerId] || p.createdBy;
+        const partnerId = p.createdBy;
         return {
           ...p,
           customerName: customerMap[p.customerId] || 'Unknown Customer',
-          partnerName: userMap[partnerId] || 'Unknown Partner'
+          partnerName: userMap[partnerId] || 'Admin'
         };
       });
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(p => p.createdBy === user.uid);
+        formattedLogs = formattedLogs.filter(p => customerPartnerMap[p.customerId] === user.uid);
       }
 
       setLogs(formattedLogs);
@@ -236,7 +236,7 @@ export default function RevenueLogsPage() {
             </div>
             
             <div className="space-y-2">
-              <Label>Served By (Partner)</Label>
+              <Label>Assigned By (Partner)</Label>
               <Popover>
                 <PopoverTrigger
                   className="w-full justify-start text-left font-normal h-10 border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border rounded-md"
@@ -313,7 +313,7 @@ export default function RevenueLogsPage() {
                 <TableBody>
                   {filteredLogs.map((log) => (
                     <TableRow key={log.id}>
-                      <TableCell className="whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDateTime(log.createdAt)}</TableCell>
                       <TableCell className="font-medium whitespace-nowrap">{log.customerName}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.planName || log.type}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.paymentMethod}</TableCell>
@@ -355,7 +355,7 @@ export default function RevenueLogsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
-            This will logically refund the <strong>₹{logToRevert?.amount?.toLocaleString()}</strong> payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative.
+            Are you sure you want to revert the payment of <strong>₹{logToRevert?.amount?.toLocaleString()}</strong> received on {logToRevert ? formatDateTime(logToRevert.createdAt) : ''}? This will logically refund the payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative.
           </div>
           <DialogFooter className="sm:justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setLogToRevert(null)}>Cancel</Button>

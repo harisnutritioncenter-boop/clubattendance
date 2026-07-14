@@ -18,6 +18,7 @@ import { UserRole, useAuthStore } from '@/store';
 import { PartnerInventoryService } from '@/features/partners/services/partner-inventory.service';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { ContactActions } from '@/components/ui/contact-actions';
 
 const secondaryApp = initializeApp(firebaseConfig, "Secondary");
 const secondaryAuth = getAuth(secondaryApp);
@@ -30,6 +31,7 @@ interface Partner {
   role: string;
   name?: string;
   clubId?: string;
+  mobile?: string;
 }
 
 interface Club {
@@ -84,6 +86,12 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
       <TableRow>
         <TableCell className="font-medium">
           {partner.name || 'Unnamed'}
+          {partner.mobile && (
+            <div className="flex items-center gap-2 mt-1 font-normal">
+              <span className="text-xs text-muted-foreground">{partner.mobile}</span>
+              <ContactActions mobile={partner.mobile} />
+            </div>
+          )}
         </TableCell>
         <TableCell>{partner.email}</TableCell>
         <TableCell className="capitalize">{partner.role === 'club_owner' ? 'Club Owner' : partner.role.replace('_', ' ')}</TableCell>

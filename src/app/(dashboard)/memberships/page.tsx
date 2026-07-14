@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MembershipService } from '@/features/memberships/services/membership.service';
 import { MembershipPlan } from '@/features/memberships/types/membership.types';
 import { useAuthStore } from '@/store';
@@ -32,6 +33,7 @@ export default function MembershipsPage() {
   const [price, setPrice] = useState('');
   const [shakesCount, setShakesCount] = useState('');
   const [validityDays, setValidityDays] = useState('');
+  const [isTrialPlan, setIsTrialPlan] = useState(false);
 
   const loadPlans = async () => {
     try {
@@ -55,13 +57,15 @@ export default function MembershipsPage() {
         name,
         price: Number(price),
         shakesCount: Number(shakesCount),
-        validityDays: Number(validityDays)
+        validityDays: Number(validityDays),
+        isTrialPlan
       });
       setOpen(false);
       setName('');
       setPrice('');
       setShakesCount('');
       setValidityDays('');
+      setIsTrialPlan(false);
       loadPlans();
     } catch (error) {
       console.error(error);
@@ -72,7 +76,7 @@ export default function MembershipsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight text-primary">Membership Plans</h1>
-        {(role === 'club_owner' || role === 'super_admin') && (
+        {(role === 'club_owner' || role === 'super_admin' || role === 'developer') && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger render={<Button />}>
               <Plus className="mr-2 h-4 w-4" />
@@ -99,7 +103,17 @@ export default function MembershipsPage() {
                   <Label htmlFor="days">Validity (Days)</Label>
                   <Input id="days" type="number" value={validityDays} onChange={e => setValidityDays(e.target.value)} required />
                 </div>
-                <Button type="submit" className="w-full">Save Plan</Button>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox 
+                    id="isTrialPlan" 
+                    checked={isTrialPlan} 
+                    onCheckedChange={(checked) => setIsTrialPlan(checked === true)} 
+                  />
+                  <Label htmlFor="isTrialPlan" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    Make it for Trials
+                  </Label>
+                </div>
+                <Button type="submit" className="w-full mt-4">Save Plan</Button>
               </form>
             </DialogContent>
           </Dialog>
@@ -119,13 +133,14 @@ export default function MembershipsPage() {
                 setDetailsOpen(true);
               }}
             >
-              {!plan.isActive && (
-                <div className="absolute top-0 right-0">
-                  <Badge variant="secondary" className="rounded-tl-none rounded-br-none">Paused</Badge>
-                </div>
-              )}
-              <CardHeader>
-                <CardTitle className="text-xl group-hover:text-primary transition-colors">{plan.name}</CardTitle>
+              <CardHeader className="pb-2 relative">
+                {!plan.isActive && (
+                  <Badge variant="destructive" className="absolute top-4 right-4">Inactive</Badge>
+                )}
+                {plan.isTrialPlan && (
+                  <Badge variant="secondary" className="absolute top-4 right-4 bg-blue-100 text-blue-800 hover:bg-blue-200">Trial Plan</Badge>
+                )}
+                <CardTitle className="text-xl pr-16 group-hover:text-primary transition-colors">{plan.name}</CardTitle>
                 <CardDescription>{plan.validityDays} Days Validity</CardDescription>
               </CardHeader>
               <CardContent>

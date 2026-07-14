@@ -1,4 +1,4 @@
-import { addDoc, getDocs, query, where, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, getDocs, query, where, orderBy, doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { cleanPayload } from '@/lib/utils';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '../types/ledger.types';
@@ -88,7 +88,7 @@ export class LedgerService {
       'CONSUME',
       'Consumption',
       newDoc.id,
-      `Served ${data.shakesDeducted} shake(s) to ${consumedByName}`,
+      `Marked ${data.shakesDeducted} attendance(s) to ${consumedByName}`,
       data.createdBy,
       data.branchId
     );
@@ -291,6 +291,33 @@ export class LedgerService {
       updatedAt: Date.now(),
       voidedBy
     });
+
+    // 2. Check if we need to revert customer back to trial
+    if (data.customerId && data.type === 'Membership') {
+      const paymentsQuery = query(
+        COLLECTIONS.PAYMENT_LEDGER,
+        where('customerId', '==', data.customerId),
+        where('isArchived', '==', false),
+        where('type', '==', 'Membership')
+      );
+      const paymentsSnap = await getDocs(paymentsQuery);
+      
+      // If there are no other active memberships for this customer
+      if (paymentsSnap.empty) {
+        const customerDocRef = doc(COLLECTIONS.CUSTOMERS, data.customerId);
+        const customerSnap = await getDoc(customerDocRef);
+        if (customerSnap.exists()) {
+          const cData = customerSnap.data();
+          if (cData.wasTrial) {
+            await updateDoc(customerDocRef, {
+              isTrial: true,
+              trialConvertedAt: deleteField()
+            });
+            CustomerService.clearCache();
+          }
+        }
+      }
+    }
 
     ActivityLogsService.logActivity(
       'REVERT',

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PartnerInventoryService, PartnerInventoryEntry } from '../services/partner-inventory.service';
+import { formatDateTime } from '@/lib/utils';
 import { getDocs, query, where, orderBy } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { toast } from 'sonner';
@@ -174,7 +175,7 @@ export function PartnerInventoryModal({ partnerId, partnerName, isOpen, onOpenCh
                   entries.map(entry => (
                     <TableRow key={entry.id}>
                       <TableCell className="text-xs whitespace-nowrap">
-                        {new Date(entry.createdAt).toLocaleString()}
+                        {formatDateTime(entry.createdAt)}
                       </TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded text-xs font-semibold ${

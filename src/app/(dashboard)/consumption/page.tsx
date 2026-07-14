@@ -9,7 +9,11 @@ import { useBranchStore, useAuthStore } from '@/store';
 import { Combobox } from '@/components/ui/combobox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { GlassWater, Minus, Plus, CheckCircle2, UserPlus, AlertTriangle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Search, Loader2, UserCheck, AlertTriangle, Plus, Banknote, GlassWater, Minus, CheckCircle2, UserPlus, Calendar as CalendarIcon } from 'lucide-react';
+import { formatDate, cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { AssignMembershipModal } from '@/features/memberships/components/assign-membership-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
@@ -18,7 +22,6 @@ import { toast } from 'sonner';
 import { getDocs, query, where } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase/collections';
 import Link from 'next/link';
-import { Banknote } from 'lucide-react';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 import { ManageShakesModal } from '@/features/partners/components/add-shakes-modal';
 
@@ -100,10 +103,16 @@ export default function ConsumptionPage() {
     }
   }, [selectedCustomerId, isAssignModalOpen]);
 
-  const customerOptions = customers.map(c => ({
-    value: c.id,
-    label: `${c.displayId || '-'} | ${c.name} | ${c.mobile}`
-  }));
+  const customerOptions = customers.map(c => {
+    let mobileDisplay = c.mobile;
+    if (role === 'junior_partner' && c.juniorPartnerId !== user?.uid) {
+      mobileDisplay = 'XXXXX XXXXX';
+    }
+    return {
+      value: c.id,
+      label: `${c.displayId || '-'} | ${c.name} | ${mobileDisplay}`
+    };
+  });
 
   const handleServe = async () => {
     if (!selectedCustomerId || !balance || !user) return;
@@ -130,6 +139,34 @@ export default function ConsumptionPage() {
         totalShakesConsumed: balance.totalShakesConsumed + serveCount
       });
       
+      // Send automated WhatsApp message
+      try {
+        const c = customers.find(x => x.id === selectedCustomerId);
+        if (c && c.mobile) {
+          const formattedDate = formatDate(serveDateObj.getTime());
+          const timeStr = serveDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          const consumed = balance.totalShakesConsumed + serveCount;
+          const remaining = balance.remainingShakes - serveCount;
+          const total = consumed + remaining;
+          
+          await fetch('/api/whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: c.name,
+              mobile: c.mobile,
+              date: formattedDate,
+              time: timeStr,
+              consumed: consumed,
+              total: total,
+              remaining: remaining
+            })
+          });
+        }
+      } catch (waError) {
+        console.error('Failed to send WhatsApp message', waError);
+      }
+      
       setSuccess(true);
       setTimeout(() => {
         // Optionally auto-clear
@@ -137,7 +174,7 @@ export default function ConsumptionPage() {
       
     } catch (error) {
       console.error(error);
-      toast.error("Failed to serve shake.");
+      toast.error("Failed to mark attendance.");
     } finally {
       setLoading(false);
     }
@@ -152,8 +189,8 @@ export default function ConsumptionPage() {
     <div className="max-w-2xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Serve Shakes</h1>
-          <p className="text-muted-foreground">Select a customer to deduct shakes from their ledger.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-primary">Attendance</h1>
+          <p className="text-muted-foreground">Select a customer to mark their attendance and deduct from their ledger.</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <Dialog open={isAddTrialOpen} onOpenChange={setIsAddTrialOpen}>
@@ -201,13 +238,36 @@ export default function ConsumptionPage() {
             </div>
             
             <div className="w-full md:w-48">
-              <CardDescription className="font-medium mb-2">Serve Date</CardDescription>
-              <Input 
-                type="date" 
-                value={serveDate}
-                onChange={(e) => setServeDate(e.target.value)}
-                className="w-full"
-              />
+              <CardDescription className="font-medium mb-2">Attendance Date</CardDescription>
+              <Popover>
+                <PopoverTrigger 
+                  render={
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !serveDate && "text-muted-foreground"
+                      )}
+                    />
+                  }
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {serveDate ? formatDate(serveDate) : <span>Pick a date</span>}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={serveDate ? new Date(serveDate) : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                        setServeDate(localDateStr);
+                      }
+                    }}
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
@@ -230,31 +290,43 @@ export default function ConsumptionPage() {
               
 
               {/* Customer Name */}
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold">{selectedCustomer?.name}</h2>
+              <div className="text-center mb-6 flex flex-col items-center justify-center gap-2">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  {selectedCustomer?.name}
+                </h2>
+                <div className="flex items-center gap-2">
+                  {selectedCustomer?.isTrial && (
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-800 border border-blue-200">
+                      Trial Customer
+                    </Badge>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setIsAssignModalOpen(true)}>
+                    Assign Membership
+                  </Button>
+                </div>
               </div>
 
-              {/* Serve Shake Action Area */}
+              {/* Attendance Action Area */}
               {success ? (
                 <div className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 p-8 rounded-xl text-center border border-green-200 dark:border-green-800 animate-in zoom-in-95 duration-300 flex flex-col items-center justify-center space-y-4 mb-8">
                   <div className="h-16 w-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-2">
                     <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold">Successfully Served!</h3>
-                    <p className="text-sm mt-1 opacity-90">{serveCount} shake(s) deducted from {selectedCustomer?.name}.</p>
+                    <h3 className="text-xl font-bold">Attendance Marked!</h3>
+                    <p className="text-sm mt-1 opacity-90">{serveCount} attendance(s) deducted from {selectedCustomer?.name}.</p>
                   </div>
                   <Button variant="outline" className="mt-4" onClick={() => {
                     setSuccess(false);
                     setServeCount(1);
                   }}>
-                    Serve Another
+                    Mark Another
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-6 mb-8">
                   <div className="flex flex-col items-center gap-4 p-6 bg-muted/30 rounded-xl border border-dashed">
-                    <p className="text-lg font-medium">How many shakes?</p>
+                    <p className="text-lg font-medium">How many attendances?</p>
                     <div className="flex items-center gap-6 bg-background p-2 rounded-full shadow-sm border">
                       <Button 
                         variant="ghost" 
@@ -283,22 +355,11 @@ export default function ConsumptionPage() {
                     size="lg" 
                     className="w-full h-14 text-lg font-bold" 
                     onClick={handleServe}
-                    disabled={loading || balance.remainingShakes <= 0}
+                    disabled={loading}
                   >
                     <GlassWater className="mr-2 h-6 w-6" />
-                    {loading ? 'Processing...' : `Serve ${serveCount} Shake${serveCount > 1 ? 's' : ''}`}
+                    {loading ? 'Processing...' : `Mark ${serveCount} Attendance${serveCount > 1 ? 's' : ''}`}
                   </Button>
-
-                  {balance.remainingShakes <= 0 && (
-                    <div className="bg-destructive/10 text-destructive p-4 rounded-lg flex flex-col items-center gap-2 border border-destructive/20 mt-2">
-                      <p className="font-medium text-center">
-                        Customer has 0 or fewer shakes remaining. Please assign a new plan.
-                      </p>
-                      <Button variant="destructive" size="sm" onClick={() => setIsAssignModalOpen(true)}>
-                        Assign Plan
-                      </Button>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -326,7 +387,7 @@ export default function ConsumptionPage() {
 
               {/* Balance Status */}
               <div className="text-center">
-                <div className="inline-flex items-center justify-center gap-4 bg-secondary p-4 rounded-xl w-full">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 bg-secondary p-3 sm:p-4 rounded-xl w-full">
                   <div className="text-center">
                     <p className="text-sm text-muted-foreground">Remaining</p>
                     <p className={`text-3xl font-bold ${balance.remainingShakes > 0 ? 'text-primary' : 'text-destructive'}`}>
@@ -337,7 +398,14 @@ export default function ConsumptionPage() {
                   <div className="text-center">
                     <p className="text-sm text-muted-foreground">Expiry</p>
                     <p className={`text-lg font-medium ${balance.isExpired ? 'text-destructive' : ''}`}>
-                      {balance.validUntil ? new Date(balance.validUntil).toLocaleDateString() : 'None'}
+                      {balance.validUntil ? formatDate(balance.validUntil) : 'None'}
+                    </p>
+                  </div>
+                  <div className="h-8 sm:h-12 w-px bg-border mx-1 sm:mx-2"></div>
+                  <div className="text-center">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Marked</p>
+                    <p className="text-base sm:text-lg font-medium">
+                      {balance.totalShakesConsumed} / {balance.remainingShakes > 0 ? balance.totalShakesConsumed + balance.remainingShakes : balance.totalShakesConsumed}
                     </p>
                   </div>
                 </div>

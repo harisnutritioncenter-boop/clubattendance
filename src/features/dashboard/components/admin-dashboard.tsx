@@ -72,7 +72,7 @@ export function AdminDashboard() {
 
       if (topPartnerId) {
         const userDoc = usersSnap.docs.find(d => d.id === topPartnerId);
-        const name = userDoc ? userDoc.data().name || userDoc.data().email : 'Unknown Partner';
+        const name = userDoc ? userDoc.data().name || userDoc.data().email : 'Admin';
         setTopPartner({ name, conversions: maxConversions });
       } else {
         setTopPartner({ name: 'No conversions yet', conversions: 0 });
@@ -98,7 +98,7 @@ export function AdminDashboard() {
           <StatCard title="Revenue This Month" value={`₹${metrics.revenue.toLocaleString()}`} icon={IndianRupee} description="Total collected" />
         </Link>
         <Link href="/consumption-logs" className="transition-transform hover:scale-105 active:scale-95 block">
-          <StatCard title="Today's Consumption" value={`${metrics.consumptionsToday} Shakes`} icon={Coffee} description="Total served today" />
+          <StatCard title="Today's Consumption" value={`${metrics.consumptionsToday} Attendances`} icon={Coffee} description="Total marked today" />
         </Link>
         <Link href="/renewals" className="transition-transform hover:scale-105 active:scale-95 block">
           <StatCard title="Renewals" value="View" icon={RefreshCcw} description="Manage expiring plans" />

@@ -9,6 +9,7 @@ import { Partner } from '@/features/partners/types/partner.types';
 import { PartnerInventoryService, PartnerInventoryEntry } from '@/features/partners/services/partner-inventory.service';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '@/features/ledger/types/ledger.types';
 import { Button } from '@/components/ui/button';
+import { ContactActions } from '@/components/ui/contact-actions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, User, Package, CreditCard, Building2, CalendarDays, Phone, Mail, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
-import { calculateAge } from '@/lib/utils';
+import { calculateAge, formatDate, formatDateTime } from '@/lib/utils';
 import { PartnerForm } from '@/features/partners/components/partner-form';
 
 export default function PartnerProfilePage() {
@@ -165,7 +166,7 @@ export default function PartnerProfilePage() {
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-            <CardDescription>Shakes Served {selectedYear === 'all' ? '(All Time)' : '(Yearly)'}</CardDescription>
+            <CardDescription>Attendances Marked {selectedYear === 'all' ? '(All Time)' : '(Yearly)'}</CardDescription>
             <Select value={selectedYear} onValueChange={(v) => setSelectedYear(v || 'all')}>
               <SelectTrigger className="w-[100px] h-8 text-xs">
                 <SelectValue />
@@ -184,7 +185,7 @@ export default function PartnerProfilePage() {
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-            <CardDescription>Shakes Served (Monthly)</CardDescription>
+            <CardDescription>Attendances Marked (Monthly)</CardDescription>
             <Select value={selectedMonth} onValueChange={(v) => setSelectedMonth(v || '0')}>
               <SelectTrigger className="w-[90px] h-8 text-xs">
                 <SelectValue />
@@ -227,7 +228,10 @@ export default function PartnerProfilePage() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-y-4 text-sm">
                   <div className="text-muted-foreground flex items-center gap-2"><Phone className="h-4 w-4" /> Mobile</div>
-                  <div className="font-medium">{partner.mobile || '-'}</div>
+                  <div className="font-medium flex items-center gap-2">
+                    <span>{partner.mobile || '-'}</span>
+                    {partner.mobile && <ContactActions mobile={partner.mobile} />}
+                  </div>
                   
                   <div className="text-muted-foreground flex items-center gap-2"><Mail className="h-4 w-4" /> Email</div>
                   <div className="font-medium">{partner.email || '-'}</div>
@@ -235,7 +239,7 @@ export default function PartnerProfilePage() {
                   <div className="text-muted-foreground flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Age / Birth Date</div>
                   <div className="font-medium">
                     {age !== null ? `${age} yrs` : '-'} 
-                    {partner.birthDate && <span className="text-muted-foreground font-normal ml-1">({new Date(partner.birthDate).toLocaleDateString()})</span>}
+                    {partner.birthDate && <span className="text-muted-foreground font-normal ml-1">({formatDate(partner.birthDate)})</span>}
                   </div>
                   
                   <div className="text-muted-foreground flex items-center gap-2"><MapPin className="h-4 w-4" /> Locality</div>
@@ -260,7 +264,7 @@ export default function PartnerProfilePage() {
                   <div className="font-medium">{clubName || '-'}</div>
 
                   <div className="text-muted-foreground">Joined At</div>
-                  <div className="font-medium">{partner.createdAt ? new Date(partner.createdAt).toLocaleString() : '-'}</div>
+                  <div className="font-medium">{partner.createdAt ? formatDateTime(partner.createdAt) : '-'}</div>
                 </div>
               </CardContent>
             </Card>
@@ -287,7 +291,7 @@ export default function PartnerProfilePage() {
                   <tbody>
                     {inventoryLog.map(entry => (
                       <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="p-4 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
+                        <td className="p-4 whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
                         <td className="p-4">
                           <Badge variant={entry.type === 'ADDITION' ? 'default' : 'secondary'}>
                             {entry.type}
@@ -331,7 +335,7 @@ export default function PartnerProfilePage() {
                   <tbody>
                     {paymentsCollected.map(entry => (
                       <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="p-4 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
+                        <td className="p-4 whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
                         <td className="p-4">
                           <Badge variant="outline">{entry.type}</Badge>
                           {entry.planName && <div className="text-xs text-muted-foreground mt-1">{entry.planName}</div>}

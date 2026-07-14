@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CreditCard, Coffee, Calendar, Receipt, Banknote } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 
 export default function PaymentsPage() {
@@ -174,7 +175,7 @@ export default function PaymentsPage() {
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                                {new Date(payment.createdAt).toLocaleDateString()}
+                                {formatDate(payment.createdAt)}
                               </div>
                             </TableCell>
                             <TableCell>

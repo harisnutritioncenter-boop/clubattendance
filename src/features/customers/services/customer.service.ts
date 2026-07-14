@@ -11,13 +11,59 @@ import {
 import { db, COLLECTIONS } from '@/firebase';
 import { cleanPayload } from '@/lib/utils';
 import { Customer, CreateCustomerDTO } from '../types/customer.types';
+import { runTransaction } from 'firebase/firestore';
 
 import { ActivityLogsService } from '@/features/activity-logs/services/activity.service';
 
 export class CustomerService {
+  private static activeCustomersCache: Customer[] | null = null;
+  private static cacheTimestamp: number = 0;
+  private static CACHE_DURATION = 3 * 60 * 60 * 1000; // 3 hours
+
+  static clearCache() {
+    this.activeCustomersCache = null;
+    this.cacheTimestamp = 0;
+  }
+
+  static getInitials(name?: string): string {
+    if (!name || name.trim() === '') return 'XY';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) {
+      return parts[0].charAt(0).toUpperCase();
+    }
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+
+  static async getNextCustomerId(juniorPartnerId?: string, partnerName?: string): Promise<string> {
+    const initials = this.getInitials(partnerName);
+    const counterId = juniorPartnerId || 'UNASSIGNED';
+    const counterRef = doc(COLLECTIONS.SETTINGS, `counter_customers_${counterId}`);
+    
+    const sequenceNumber = await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      let newCount = 1;
+      if (counterDoc.exists()) {
+        newCount = (counterDoc.data().count || 0) + 1;
+        transaction.update(counterRef, { count: newCount });
+      } else {
+        transaction.set(counterRef, { count: newCount, initials, partnerId: counterId });
+      }
+      return newCount;
+    });
+    
+    return `${initials}${String(sequenceNumber).padStart(4, '0')}`;
+  }
+
   static async createCustomer(data: CreateCustomerDTO): Promise<string> {
-    // Generate a simple 4 digit ID e.g. HC-8492
-    const displayId = `HC-${Math.floor(1000 + Math.random() * 9000)}`;
+    let partnerName = '';
+    if (data.juniorPartnerId) {
+      const partnerDoc = await getDoc(doc(COLLECTIONS.USERS, data.juniorPartnerId));
+      if (partnerDoc.exists()) {
+        partnerName = partnerDoc.data().name || '';
+      }
+    }
+    
+    const displayId = await this.getNextCustomerId(data.juniorPartnerId, partnerName);
     
     const newDoc = await addDoc(COLLECTIONS.CUSTOMERS, cleanPayload({
       ...data,
@@ -37,6 +83,8 @@ export class CustomerService {
       data.branchId
     );
     
+    
+    this.clearCache();
     return newDoc.id;
   }
 
@@ -47,7 +95,19 @@ export class CustomerService {
     return { id: snapshot.id, ...snapshot.data() } as Customer;
   }
 
-  static async getActiveCustomers(branchId?: string | null): Promise<Customer[]> {
+  static async getActiveCustomers(branchId?: string | null, forceRefresh = false): Promise<Customer[]> {
+    if (
+      !forceRefresh && 
+      this.activeCustomersCache && 
+      (Date.now() - this.cacheTimestamp < this.CACHE_DURATION)
+    ) {
+      let customers = this.activeCustomersCache;
+      if (branchId && branchId !== 'default-branch' && branchId !== 'all') {
+        customers = customers.filter(c => c.branchId === branchId);
+      }
+      return customers;
+    }
+
     // Fetch all active customers and filter in-memory to bypass Firebase composite index requirements
     const q = query(
       COLLECTIONS.CUSTOMERS,
@@ -57,6 +117,9 @@ export class CustomerService {
     
     const snapshot = await getDocs(q);
     let customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+    
+    this.activeCustomersCache = customers;
+    this.cacheTimestamp = Date.now();
     
     if (branchId && branchId !== 'default-branch' && branchId !== 'all') {
       customers = customers.filter(c => c.branchId === branchId);
@@ -80,6 +143,7 @@ export class CustomerService {
       performedBy,
       branchId
     );
+    this.clearCache();
   }
 
   static async softDeleteCustomer(id: string, performedBy: string, branchId?: string): Promise<void> {
@@ -97,6 +161,7 @@ export class CustomerService {
       performedBy,
       branchId
     );
+    this.clearCache();
   }
 
   static async revertCustomer(id: string, performedBy: string, branchId?: string): Promise<void> {
@@ -114,5 +179,6 @@ export class CustomerService {
       performedBy,
       branchId
     );
+    this.clearCache();
   }
 }

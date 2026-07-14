@@ -80,7 +80,7 @@ export function JuniorDashboard() {
             title="My Shake Inventory" 
             value={`${metrics.myInventory} Shakes`} 
             icon={Coffee} 
-            description="Remaining balance to serve" 
+            description="Remaining balance to mark" 
           />
         </Link>
         <Link href="/customers" className="transition-transform hover:scale-[1.02] active:scale-95 block">

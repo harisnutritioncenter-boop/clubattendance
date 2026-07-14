@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, orderBy, getDocs, updateDoc, where, deleteField } from 'firebase/firestore';
 import { db } from '@/firebase/firestore';
 import { COLLECTIONS } from '@/firebase/collections';
 import { useAuthStore } from '@/store';
+import { CustomerService } from '@/features/customers/services/customer.service';
 import { ShieldAlert, Lock, Unlock, Mail, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,7 @@ export default function DeveloperPortalPage() {
   const [config, setConfig] = useState<SystemConfig>({ isAppLocked: false, restrictedEmails: [] });
   const [loading, setLoading] = useState(true);
   const [newEmail, setNewEmail] = useState('');
+  const [migrating, setMigrating] = useState(false);
 
   const configRef = doc(COLLECTIONS.SETTINGS, 'system_config');
 
@@ -90,6 +92,94 @@ export default function DeveloperPortalPage() {
       toast.success('Email restriction removed.');
     } catch (error) {
       toast.error('Failed to remove email restriction.');
+    }
+  };
+
+  const handleMigrateIds = async () => {
+    if (!confirm('Are you sure you want to run the customer ID migration? This will overwrite existing IDs!')) return;
+    setMigrating(true);
+    try {
+      const usersSnap = await getDocs(COLLECTIONS.USERS);
+      const partnersMap = new Map();
+      usersSnap.docs.forEach(d => {
+        partnersMap.set(d.id, d.data().name || '');
+      });
+
+      const q = query(COLLECTIONS.CUSTOMERS, orderBy('createdAt', 'asc'));
+      const custSnap = await getDocs(q);
+      
+      const counters = new Map(); 
+      let migratedCount = 0;
+
+      for (const customerDoc of custSnap.docs) {
+        const data = customerDoc.data();
+        const partnerId = data.juniorPartnerId || 'UNASSIGNED';
+        const partnerName = partnersMap.get(partnerId) || '';
+        
+        let count = counters.get(partnerId) || 0;
+        count++;
+        counters.set(partnerId, count);
+        
+        const initials = CustomerService.getInitials(partnerName);
+        const displayId = `${initials}${String(count).padStart(4, '0')}`;
+        
+        await updateDoc(doc(COLLECTIONS.CUSTOMERS, customerDoc.id), {
+          displayId,
+        });
+        migratedCount++;
+      }
+      
+      for (const [pId, count] of counters.entries()) {
+        const initials = CustomerService.getInitials(partnersMap.get(pId) || '');
+        const counterRef = doc(COLLECTIONS.SETTINGS, `counter_customers_${pId}`);
+        await setDoc(counterRef, { count, initials, partnerId: pId }, { merge: true });
+      }
+
+      toast.success(`Successfully migrated ${migratedCount} customer IDs!`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Migration failed!');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handleFixTrialConversions = async () => {
+    if (!confirm('Are you sure you want to fix trial conversions? This will scan all customers and revert those with no active memberships back to trial.')) return;
+    setMigrating(true);
+    try {
+      const q = query(COLLECTIONS.CUSTOMERS);
+      const custSnap = await getDocs(q);
+      let fixedCount = 0;
+
+      for (const customerDoc of custSnap.docs) {
+        const data = customerDoc.data();
+        if (data.wasTrial && !data.isTrial) {
+          // Check for active memberships
+          const paymentsQuery = query(
+            COLLECTIONS.PAYMENT_LEDGER,
+            where('customerId', '==', customerDoc.id),
+            where('isArchived', '==', false),
+            where('type', '==', 'Membership')
+          );
+          const paymentsSnap = await getDocs(paymentsQuery);
+          
+          if (paymentsSnap.empty) {
+            await updateDoc(doc(COLLECTIONS.CUSTOMERS, customerDoc.id), {
+              isTrial: true,
+              trialConvertedAt: deleteField()
+            });
+            fixedCount++;
+          }
+        }
+      }
+      toast.success(`Successfully fixed ${fixedCount} trial customers!`);
+      CustomerService.clearCache();
+    } catch (err) {
+      console.error(err);
+      toast.error('Fix failed!');
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -176,6 +266,37 @@ export default function DeveloperPortalPage() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+
+        {/* DB Migration Card */}
+        <div className="p-6 rounded-xl border border-border bg-card">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold flex items-center gap-2 text-primary">
+              <ShieldAlert className="h-5 w-5" />
+              Data Migrations
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Run structural updates on the database.
+            </p>
+          </div>
+          <div className="mt-6">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={handleMigrateIds}
+              disabled={migrating}
+            >
+              {migrating ? 'Migrating...' : 'Migrate Customer IDs to Partner Format'}
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full mt-2"
+              onClick={handleFixTrialConversions}
+              disabled={migrating}
+            >
+              {migrating ? 'Fixing...' : 'Fix Voided Trial Conversions'}
+            </Button>
           </div>
         </div>
       </div>

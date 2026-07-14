@@ -48,7 +48,7 @@ export class MembershipService {
   static async assignMembership(
     customerId: string, 
     planId: string, 
-    paymentMethod: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer',
+    paymentMethod: 'Cash' | 'Card' | 'UPI' | 'Bank Transfer' | 'Due',
     branchId: string,
     createdBy: string,
     amountPaid?: number
@@ -79,9 +79,9 @@ export class MembershipService {
 
     const paymentId = await LedgerService.addPayment(ledgerEntry);
     
-    // 3. Remove trial flag if they are becoming a member
+    // 3. Remove trial flag if they are becoming a member and it's not a trial plan
     const customer = await CustomerService.getCustomer(customerId);
-    if (customer?.isTrial) {
+    if (customer?.isTrial && !plan.isTrialPlan) {
       await CustomerService.updateCustomer(customerId, { 
         isTrial: false,
         wasTrial: true,

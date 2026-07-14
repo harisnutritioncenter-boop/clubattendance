@@ -12,11 +12,14 @@ import { getDocs, query, where, orderBy, doc, getDoc } from 'firebase/firestore'
 import { COLLECTIONS, db } from '@/firebase';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Calendar as CalendarIcon, CreditCard, User, Info, MapPin, Phone, Target, CalendarDays, ChevronLeft, ChevronRight, Check, Trash2 } from 'lucide-react';
+import { ContactActions } from '@/components/ui/contact-actions';
+import { ArrowLeft, Calendar as CalendarIcon, CreditCard, User, Info, MapPin, Phone, Target, CalendarDays, ChevronLeft, ChevronRight, Check, Trash2, Minus, Plus, GlassWater, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { calculateAge } from '@/lib/utils';
+import { calculateAge, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
@@ -43,6 +46,7 @@ export default function CustomerProfilePage() {
   const [partnerName, setPartnerName] = useState<string>('');
   const [status, setStatus] = useState<CustomerMembershipStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [familyNames, setFamilyNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   const { user, role: authRole } = useAuthStore();
@@ -56,6 +60,13 @@ export default function CustomerProfilePage() {
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [paymentToRevert, setPaymentToRevert] = useState<PaymentLedgerEntry | null>(null);
   const [consumptionToRevert, setConsumptionToRevert] = useState<ShakeLedgerEntry | null>(null);
+
+  // Attendance Mark State
+  const [isMarkAttendanceOpen, setIsMarkAttendanceOpen] = useState(false);
+  const [serveCount, setServeCount] = useState(1);
+  const [serveDate, setServeDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [markingAttendance, setMarkingAttendance] = useState(false);
+  const [attendanceSuccess, setAttendanceSuccess] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -103,6 +114,12 @@ export default function CustomerProfilePage() {
         
         setLedger(records);
 
+        // 5. Fetch all customers for family name mapping
+        const allCusts = await CustomerService.getActiveCustomers(branchId || 'default-branch');
+        const nameMap: Record<string, string> = {};
+        allCusts.forEach(c => { nameMap[c.id] = c.name; });
+        setFamilyNames(nameMap);
+
       } catch (err) {
         console.error(err);
         toast.error("Failed to load customer profile");
@@ -138,16 +155,24 @@ export default function CustomerProfilePage() {
 
     let totalAssigned = 0;
     let totalConsumed = 0;
+    let assignedBeforeToday = 0;
+    let consumedBeforeToday = 0;
     const todaysLogs: LedgerEntry[] = [];
 
     // Because ledger is sorted chronologically, we just iterate through
     for (const entry of ledger) {
       if (entry.createdAt > endOfDay) break; // Don't count future events
 
+      const isBeforeToday = entry.createdAt < startOfDay;
+
       if (entry.type === 'Membership' || entry.type === 'Add Shakes' || entry.type === 'Debt Collection') {
-        totalAssigned += ((entry as PaymentLedgerEntry).shakesAdded || 0);
+        const amt = (entry as PaymentLedgerEntry).shakesAdded || 0;
+        totalAssigned += amt;
+        if (isBeforeToday) assignedBeforeToday += amt;
       } else if (entry.type === 'Consumption') {
-        totalConsumed += ((entry as ShakeLedgerEntry).shakesDeducted || 0);
+        const amt = (entry as ShakeLedgerEntry).shakesDeducted || 0;
+        totalConsumed += amt;
+        if (isBeforeToday) consumedBeforeToday += amt;
       }
 
       // Check if the entry happened ON this specific day
@@ -158,7 +183,7 @@ export default function CustomerProfilePage() {
       }
     }
 
-    return { totalAssigned, totalConsumed, todaysLogs };
+    return { totalAssigned, totalConsumed, assignedBeforeToday, consumedBeforeToday, todaysLogs };
   };
 
   const handleDayClick = (logs: LedgerEntry[], day: number) => {
@@ -237,6 +262,88 @@ export default function CustomerProfilePage() {
     }
   };
 
+  const handleServe = async () => {
+    if (!status || !user) return;
+    
+    const bId = branchId || 'default-branch';
+    setMarkingAttendance(true);
+    try {
+      const serveDateObj = new Date(serveDate);
+      serveDateObj.setHours(new Date().getHours());
+      serveDateObj.setMinutes(new Date().getMinutes());
+      
+      const notesStr = customer?.isTrial ? `Marked ${serveCount} attendance.` : `Served ${serveCount} shakes.`;
+
+      const newConsumptionId = await LedgerService.addConsumption({
+        shakesDeducted: serveCount,
+        branchId: bId,
+        createdBy: user.uid,
+        createdAt: serveDateObj.getTime(),
+        notes: notesStr
+      }, customerId);
+      
+      const newShakeEntry = {
+        id: newConsumptionId,
+        shakesDeducted: serveCount,
+        branchId: bId,
+        createdBy: user.uid,
+        createdAt: serveDateObj.getTime(),
+        notes: notesStr,
+        customerId,
+        type: 'Consumption',
+        isArchived: false,
+      } as LedgerEntry;
+
+      setLedger(prev => [...prev, newShakeEntry].sort((a, b) => a.createdAt - b.createdAt));
+
+      setStatus({
+        ...status,
+        remainingShakes: status.remainingShakes - serveCount,
+        totalShakesConsumed: status.totalShakesConsumed + serveCount
+      });
+      
+      // Send automated WhatsApp message
+      try {
+        if (customer && customer.mobile) {
+          const formattedDate = formatDate(serveDateObj.getTime());
+          const timeStr = serveDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          const consumed = status.totalShakesConsumed + serveCount;
+          const remaining = status.remainingShakes - serveCount;
+          const total = consumed + remaining;
+          
+          await fetch('/api/whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: customer.name,
+              mobile: customer.mobile,
+              date: formattedDate,
+              time: timeStr,
+              consumed: consumed,
+              total: total,
+              remaining: remaining
+            })
+          });
+        }
+      } catch (waError) {
+        console.error('Failed to send WhatsApp message', waError);
+      }
+      
+      setAttendanceSuccess(true);
+      setTimeout(() => {
+        setIsMarkAttendanceOpen(false);
+        setAttendanceSuccess(false);
+        setServeCount(1);
+      }, 2000);
+      
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to mark attendance.");
+    } finally {
+      setMarkingAttendance(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center animate-pulse">Loading Customer Profile...</div>;
   }
@@ -254,10 +361,27 @@ export default function CustomerProfilePage() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{customer.name}</h1>
-            <p className="text-muted-foreground">{customer.displayId} • Joined {new Date(customer.createdAt).toLocaleDateString()}</p>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-muted-foreground mt-1">
+              <p>{customer.displayId} • Joined {formatDate(customer.createdAt)}</p>
+              <div className="hidden sm:block h-4 w-px bg-border"></div>
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <ContactActions mobile={customer.mobile} />
+                <span>{customer.mobile}</span>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button 
+            className="bg-green-600 hover:bg-green-700 text-white" 
+            onClick={() => {
+              setServeCount(1);
+              setAttendanceSuccess(false);
+              setIsMarkAttendanceOpen(true);
+            }}
+          >
+            <Check className="mr-2 h-4 w-4" /> Mark Attendance
+          </Button>
           <Button variant="outline" onClick={() => setEditModalOpen(true)}>Edit Profile</Button>
           {status && status.remainingBalance > 0 && (
              <Button variant="destructive" onClick={() => setCollectModalOpen(true)}>Collect Debt (₹{status.remainingBalance})</Button>
@@ -289,7 +413,7 @@ export default function CustomerProfilePage() {
                   <div className="text-muted-foreground">Age / Birth Date</div>
                   <div className="font-medium">
                     {age !== null ? `${age} yrs` : '-'} 
-                    {customer.birthDate && <span className="text-muted-foreground font-normal ml-1">({new Date(customer.birthDate).toLocaleDateString()})</span>}
+                    {customer.birthDate && <span className="text-muted-foreground font-normal ml-1">({formatDate(customer.birthDate)})</span>}
                   </div>
                   
                   <div className="text-muted-foreground">Locality</div>
@@ -320,7 +444,7 @@ export default function CustomerProfilePage() {
                   <div className="text-muted-foreground">Active Plan</div>
                   <div className="font-medium text-primary font-bold">{status?.latestPlanName || 'None'}</div>
 
-                  <div className="text-muted-foreground">Remaining Shakes</div>
+                  <div className="text-muted-foreground">Remaining Attendances</div>
                   <div className="font-medium text-lg font-bold">{status?.remainingShakes || 0}</div>
                   
                   {customer.notes && (
@@ -340,7 +464,7 @@ export default function CustomerProfilePage() {
             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 sm:pb-8 gap-4">
               <div>
                 <CardTitle className="text-2xl">Attendance & Consumption</CardTitle>
-                <CardDescription>View daily shake consumption. Numbers represent (Consumed / Total Assigned).</CardDescription>
+                <CardDescription>View daily attendance. Numbers represent (Marked / Total Assigned).</CardDescription>
               </div>
               <div className="flex items-center gap-4 bg-background p-1 rounded-lg border">
                 <Button variant="ghost" size="icon" onClick={prevMonth}><ChevronLeft className="h-5 w-5" /></Button>
@@ -364,10 +488,13 @@ export default function CustomerProfilePage() {
                 {/* Actual days */}
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const day = i + 1;
-                  const { totalAssigned, totalConsumed, todaysLogs } = getDayData(day);
+                  const { totalAssigned, totalConsumed, assignedBeforeToday, consumedBeforeToday, todaysLogs } = getDayData(day);
                   const hasConsumedToday = todaysLogs.length > 0;
                   const isToday = new Date().toDateString() === new Date(currentYear, currentMonth, day).toDateString();
                   const isFuture = new Date(currentYear, currentMonth, day).getTime() > new Date().getTime();
+
+                  const wasFullyConsumedBeforeToday = assignedBeforeToday > 0 && consumedBeforeToday >= assignedBeforeToday;
+                  const showRunningTotal = !isFuture && totalAssigned > 0 && (!wasFullyConsumedBeforeToday || hasConsumedToday);
 
                   return (
                     <div 
@@ -387,7 +514,7 @@ export default function CustomerProfilePage() {
                         )}
                       </div>
                       
-                      {!isFuture && totalAssigned > 0 && (
+                      {showRunningTotal && (
                         <div className="mt-auto">
                           <div className={`text-center font-mono text-sm py-1.5 rounded-md ${
                             hasConsumedToday ? 'bg-primary/10 text-primary font-bold' : 'bg-muted text-muted-foreground'
@@ -427,7 +554,7 @@ export default function CustomerProfilePage() {
                       const pEntry = entry as PaymentLedgerEntry;
                       return (
                       <tr key={pEntry.id} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="p-4 whitespace-nowrap">{new Date(pEntry.createdAt).toLocaleString()}</td>
+                        <td className="p-4 whitespace-nowrap">{formatDateTime(pEntry.createdAt)}</td>
                         <td className="p-4">
                           <Badge variant={pEntry.type === 'Debt Collection' ? 'secondary' : 'outline'}>
                             {pEntry.type}
@@ -475,19 +602,33 @@ export default function CustomerProfilePage() {
           <div className="space-y-4 pt-4">
             {selectedDateLogs.map((log, i) => {
               const sLog = log as ShakeLedgerEntry;
+              const consumerName = sLog.consumedBy && familyNames[sLog.consumedBy] ? familyNames[sLog.consumedBy] : customer?.name;
+              const markedByName = sLog.createdBy === customer?.juniorPartnerId ? (partnerName || 'Partner') : 'Admin';
+              
+              let displayNotes = sLog.notes || 'Marked attendance';
+              if (displayNotes.includes('Served') && displayNotes.includes('shakes')) {
+                displayNotes = displayNotes.replace('Served', 'Marked').replace('shakes.', 'attendance(s).');
+              }
               return (
               <div key={sLog.id || i} className="flex flex-col gap-1 p-3 bg-muted/30 rounded-lg border">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold">{new Date(sLog.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="font-semibold flex items-center gap-2">
+                      {new Date(sLog.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {customer?.isTrial && <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-[10px] h-4 px-1 py-0">Trial</Badge>}
+                    </span>
+                    <span className="text-xs text-primary font-medium block mt-1">Consumed By: {consumerName}</span>
+                    <span className="text-xs text-muted-foreground font-medium block">Marked By: {markedByName}</span>
+                  </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">-{sLog.shakesDeducted || 1} Shake</Badge>
+                    <Badge variant="outline">-{sLog.shakesDeducted || 1} Attendance(s)</Badge>
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRevert(sLog)} title="Revert Consumption">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground mt-2">
-                  {sLog.notes || 'Consumed shake'}
+                  {displayNotes}
                 </div>
               </div>
             )})}
@@ -530,14 +671,14 @@ export default function CustomerProfilePage() {
           <DialogHeader>
             <DialogTitle className="text-destructive flex items-center gap-2">
               <Trash2 className="h-5 w-5" />
-              Revert Shake Consumption
+              Revert Attendance
             </DialogTitle>
             <DialogDescription className="pt-2 text-base">
-              Are you sure you want to revert the <strong>{consumptionToRevert?.shakesDeducted || 1} shake(s)</strong> consumed on {consumptionToRevert ? new Date(consumptionToRevert.createdAt).toLocaleString() : ''}?
+              Are you sure you want to revert the <strong>{consumptionToRevert?.shakesDeducted || 1} attendance(s)</strong> marked on {consumptionToRevert ? formatDateTime(consumptionToRevert.createdAt) : ''}?
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
-            This will restore the shake(s) back to the customer's balance.
+            This will restore the attendance(s) back to the customer's balance.
           </div>
           <DialogFooter className="sm:justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setConsumptionToRevert(null)}>Cancel</Button>
@@ -559,7 +700,7 @@ export default function CustomerProfilePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
-            This will logically refund the <strong>₹{paymentToRevert?.amount?.toLocaleString()}</strong> payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative.
+            This will logically refund the <strong>₹{paymentToRevert?.amount?.toLocaleString()}</strong> payment and immediately subtract the attendances from their available balance. If they have already marked those attendances, their balance will become negative.
           </div>
           <DialogFooter className="sm:justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setPaymentToRevert(null)}>Cancel</Button>
@@ -567,6 +708,112 @@ export default function CustomerProfilePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Mark Attendance Modal */}
+      {customer && status && (
+        <Dialog open={isMarkAttendanceOpen} onOpenChange={(open) => {
+          if (!open) {
+            setIsMarkAttendanceOpen(false);
+            setAttendanceSuccess(false);
+            setServeCount(1);
+          } else {
+            setIsMarkAttendanceOpen(true);
+          }
+        }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Mark Attendance for {customer.name}</DialogTitle>
+              <DialogDescription>
+                Deduct attendances from the customer's remaining balance.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-6 flex flex-col items-center">
+              {attendanceSuccess ? (
+                <div className="flex flex-col items-center animate-in zoom-in-95 duration-300 space-y-4">
+                  <div className="h-16 w-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-2">
+                    <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-xl font-bold text-green-700 dark:text-green-400">Attendance Marked!</h3>
+                    <p className="text-sm mt-1 text-muted-foreground">{serveCount} attendance(s) deducted.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col items-center gap-4 mb-6">
+                    <p className="text-sm font-medium">How many attendances?</p>
+                    <div className="flex items-center gap-6 bg-muted/50 p-2 rounded-full border">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="rounded-full h-10 w-10"
+                        onClick={() => setServeCount(Math.max(1, serveCount - 1))}
+                        disabled={serveCount <= 1}
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <div className="flex flex-col items-center min-w-[2rem]">
+                        <span className="text-2xl font-bold">{serveCount}</span>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="rounded-full h-10 w-10"
+                        onClick={() => setServeCount(serveCount + 1)}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="w-full mb-6">
+                    <p className="text-sm font-medium mb-2 text-center">Attendance Date</p>
+                    <Popover>
+                      <PopoverTrigger 
+                        render={
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !serveDate && "text-muted-foreground"
+                            )}
+                          />
+                        }
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {serveDate ? formatDate(serveDate) : <span>Pick a date</span>}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="center">
+                        <Calendar
+                          mode="single"
+                          selected={serveDate ? new Date(serveDate) : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                              setServeDate(localDateStr);
+                            }
+                          }}
+                          disabled={(date) => date > new Date()}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <Button 
+                    size="lg" 
+                    className="w-full text-base font-bold bg-green-600 hover:bg-green-700 text-white" 
+                    onClick={handleServe}
+                    disabled={markingAttendance}
+                  >
+                    <GlassWater className="mr-2 h-5 w-5" />
+                    {markingAttendance ? 'Processing...' : `Confirm ${serveCount} Attendance${serveCount > 1 ? 's' : ''}`}
+                  </Button>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

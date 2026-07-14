@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { formatDate } from '@/lib/utils';
 import { useBranchStore, useAuthStore } from '@/store';
 import { CustomerService } from '../services/customer.service';
 import { Customer } from '../types/customer.types';
@@ -29,7 +30,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Filter, Search, Download } from 'lucide-react';
+import { Edit, Eye, Filter, Download, Plus, AlertTriangle, MessageCircle, Phone, Copy, Search } from "lucide-react";
+import { ContactActions } from "@/components/ui/contact-actions";
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
@@ -40,6 +42,7 @@ export function CustomerList() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [balances, setBalances] = useState<Record<string, CustomerMembershipStatus>>({});
   const [partners, setPartners] = useState<Record<string, string>>({});
+  const [branches, setBranches] = useState<Record<string, string>>({});
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +51,7 @@ export function CustomerList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [jpFilter, setJpFilter] = useState('ALL');
+  const [clubFilter, setClubFilter] = useState('ALL');
   const [purposeFilter, setPurposeFilter] = useState('ALL');
   const [inventoryFilter, setInventoryFilter] = useState('ALL');
 
@@ -75,10 +79,25 @@ export function CustomerList() {
         if (!isActive) return;
         setPartners(partnerMap);
 
+        // 1.5 Fetch Branches for Admin
+        if (authState.role === 'super_admin') {
+          const branchesSnap = await getDocs(COLLECTIONS.BRANCHES);
+          const branchMap: Record<string, string> = {};
+          branchesSnap.docs.forEach(doc => {
+            branchMap[doc.id] = doc.data().name;
+          });
+          if (!isActive) return;
+          setBranches(branchMap);
+        }
+
         // 2. Fetch Customers
         let data = await CustomerService.getActiveCustomers(activeBranchId);
         // Filter out trial customers
         data = data.filter(c => c.isTrial !== true);
+        
+        if (authState.role === 'junior_partner' && authState.user) {
+          data = data.filter(c => c.juniorPartnerId === authState.user!.uid);
+        }
         
         if (!isActive) return;
         setCustomers(data);
@@ -180,7 +199,12 @@ export function CustomerList() {
       if (statusFilter === 'EXPIRED' && bal && !bal.isExpired && bal.remainingShakes > 0) return false;
 
       // JP Filter
-      if (jpFilter !== 'ALL' && c.juniorPartnerId !== jpFilter) return false;
+      if (jpFilter === 'UNASSIGNED' && c.juniorPartnerId) return false;
+      if (jpFilter !== 'ALL' && jpFilter !== 'UNASSIGNED' && c.juniorPartnerId !== jpFilter) return false;
+
+      // Club Filter
+      if (clubFilter === 'UNASSIGNED' && c.branchId && c.branchId !== 'default-branch') return false;
+      if (clubFilter !== 'ALL' && clubFilter !== 'UNASSIGNED' && c.branchId !== clubFilter) return false;
 
       // Purpose Filter
       if (purposeFilter !== 'ALL' && (!c.purpose || !c.purpose.includes(purposeFilter as any))) return false;
@@ -191,7 +215,7 @@ export function CustomerList() {
 
       return true;
     });
-  }, [customers, balances, partners, searchQuery, statusFilter, jpFilter, purposeFilter, inventoryFilter]);
+  }, [customers, balances, partners, searchQuery, statusFilter, jpFilter, clubFilter, purposeFilter, inventoryFilter]);
 
   const exportToExcel = () => {
     if (filteredCustomers.length === 0) {
@@ -291,17 +315,38 @@ export function CustomerList() {
             <Select value={jpFilter} onValueChange={(v) => setJpFilter(v || '')}>
               <SelectTrigger className="h-8 px-1.5 sm:px-3 text-[10px] sm:text-xs">
                 <SelectValue placeholder="Partner">
-                  {jpFilter === 'ALL' ? 'All' : (partners[jpFilter] ? partners[jpFilter].split(' ')[0] : 'Partner')}
+                  {jpFilter === 'ALL' ? 'All' : jpFilter === 'UNASSIGNED' ? 'Unassigned' : (partners[jpFilter] ? partners[jpFilter].split(' ')[0] : 'Partner')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL" className="text-xs">All</SelectItem>
+                <SelectItem value="UNASSIGNED" className="text-xs">Unassigned</SelectItem>
                 {Object.entries(partners).map(([id, name]) => (
                   <SelectItem key={id} value={id} className="text-xs">{name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {authState.role === 'super_admin' && (
+            <div className="w-full min-w-0">
+              <label className="text-[10px] sm:text-xs font-semibold text-muted-foreground mb-1 block truncate">Club</label>
+              <Select value={clubFilter} onValueChange={(v) => setClubFilter(v || '')}>
+                <SelectTrigger className="h-8 px-1.5 sm:px-3 text-[10px] sm:text-xs">
+                  <SelectValue placeholder="Club">
+                    {clubFilter === 'ALL' ? 'All' : clubFilter === 'UNASSIGNED' ? 'Unassigned' : (branches[clubFilter] ? branches[clubFilter] : 'Club')}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL" className="text-xs">All</SelectItem>
+                  <SelectItem value="UNASSIGNED" className="text-xs">Unassigned</SelectItem>
+                  {Object.entries(branches).map(([id, name]) => (
+                    <SelectItem key={id} value={id} className="text-xs">{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="w-full min-w-0">
             <label className="text-[10px] sm:text-xs font-semibold text-muted-foreground mb-1 block truncate">Purpose</label>
@@ -360,7 +405,7 @@ export function CustomerList() {
                 const pName = partners[customer.juniorPartnerId || ''] || '-';
                 const isExpired = bal?.isExpired;
                 const expiryText = bal?.validUntil 
-                  ? new Date(bal.validUntil).toLocaleDateString() 
+                  ? formatDate(bal.validUntil) 
                   : 'No Active Plan';
 
                 return (
@@ -376,7 +421,12 @@ export function CustomerList() {
                       {customer.displayId || '-'}
                     </TableCell>
                     <TableCell className="font-semibold">{customer.name}</TableCell>
-                    <TableCell>{customer.mobile}</TableCell>
+                    <TableCell>
+                      <div>
+                        <span className="font-medium text-xs sm:text-sm">{customer.mobile}</span>
+                        <ContactActions mobile={customer.mobile} />
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <span className="bg-secondary px-2 py-1 rounded-md text-xs font-medium">
                         {pName}

@@ -24,8 +24,8 @@ interface AssignMembershipModalProps {
 export function AssignMembershipModal({ customerId, customerName, open, onOpenChange, onSuccess }: AssignMembershipModalProps) {
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'UPI' | 'Bank Transfer'>('Cash');
-  const [paymentType, setPaymentType] = useState<'Full' | 'Partial'>('Full');
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'UPI' | 'Bank Transfer' | 'Due'>('Cash');
+  const [paymentType, setPaymentType] = useState<'Full' | 'Partial' | 'Due'>('Full');
   const [partialAmount, setPartialAmount] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
 
@@ -47,20 +47,27 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
     
     let finalAmount = selectedPlan.price;
 
-    if (paymentType === 'Partial') {
+    if (selectedPlan.isTrialPlan) {
+      finalAmount = 0;
+    } else if (paymentType === 'Partial') {
       if (!partialAmount || partialAmount <= 0) {
         toast.error("Please enter a valid partial amount");
         return;
       }
       finalAmount = Number(partialAmount);
+    } else if (paymentType === 'Due') {
+      finalAmount = 0;
     }
+    
+    // Automatically set payment method to 'Due' if amount is 0
+    const finalPaymentMethod = paymentType === 'Due' ? 'Due' : paymentMethod;
     
     setLoading(true);
     try {
       await MembershipService.assignMembership(
         customerId,
         selectedPlan.id,
-        paymentMethod,
+        finalPaymentMethod,
         branchId,
         user.uid,
         finalAmount
@@ -100,13 +107,13 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
               <option value="">-- Choose a Plan --</option>
               {plans.map(p => (
                 <option key={p.id} value={p.id}>
-                  {p.name} - ₹{p.price} ({p.shakesCount} shakes / {p.validityDays} days)
+                  {p.isTrialPlan ? '[TRIAL PLAN] ' : ''}{p.name} - ₹{p.price} ({p.shakesCount} shakes / {p.validityDays} days)
                 </option>
               ))}
             </select>
           </div>
 
-          {selectedPlan && (
+          {selectedPlan && !selectedPlan.isTrialPlan && (
             <>
               <div className="space-y-3 bg-muted/50 p-4 rounded-lg border">
                 <Label>Payment Collection</Label>
@@ -133,6 +140,17 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
                     />
                     <span className="text-sm font-medium">Partial Payment</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="paymentType" 
+                      value="Due" 
+                      checked={paymentType === 'Due'} 
+                      onChange={() => setPaymentType('Due')}
+                      className="accent-primary"
+                    />
+                    <span className="text-sm font-medium">Due (Full Amount)</span>
+                  </label>
                 </div>
                 
                 {paymentType === 'Partial' && (
@@ -158,26 +176,28 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
                 )}
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="payment">Payment Method</Label>
-                <select
-                  id="payment"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value as any)}
-                  required
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="Card">Card</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                </select>
-              </div>
+              {paymentType !== 'Due' && (
+                <div className="space-y-2">
+                  <Label htmlFor="payment">Payment Method</Label>
+                  <select
+                    id="payment"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={paymentMethod}
+                    onChange={e => setPaymentMethod(e.target.value as any)}
+                    required
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Card">Card</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+              )}
             </>
           )}
 
           <Button type="submit" className="w-full" disabled={loading || !selectedPlanId}>
-            {loading ? 'Processing...' : 'Confirm & Charge'}
+            {loading ? 'Processing...' : (selectedPlan?.isTrialPlan ? 'Assign Trial Membership' : 'Confirm & Charge')}
           </Button>
         </form>
       </DialogContent>

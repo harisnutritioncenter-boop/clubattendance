@@ -25,3 +25,33 @@ export function calculateAge(birthDateTimestamp: number | undefined | null): num
   }
   return age;
 }
+
+export function formatDate(timestamp: number | string | Date | undefined | null): string {
+  if (!timestamp) return '-';
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return '-';
+  
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear().toString().slice(-2);
+  
+  return `${day}/${month}/${year}`;
+}
+
+export function formatDateTime(timestamp: number | string | Date | undefined | null): string {
+  if (!timestamp) return '-';
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return '-';
+  
+  const day = d.getDate().toString().padStart(2, '0');
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const year = d.getFullYear().toString().slice(-2);
+  
+  let hours = d.getHours();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  const min = d.getMinutes().toString().padStart(2, '0');
+  
+  return `${day}/${month}/${year} ${hours}:${min} ${ampm}`;
+}
