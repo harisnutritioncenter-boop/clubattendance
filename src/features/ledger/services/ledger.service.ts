@@ -123,42 +123,64 @@ export class LedgerService {
     const consumptionsSnap = await getDocs(consumptionsQuery);
     const consumptions = consumptionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry));
 
-    // 3. Calculate Ledger Balances
-    let totalShakesPurchased = 0;
+    // 4. Calculate Ledger Balances using Cycle Logic
+    type UnifiedLedgerEntry = (PaymentLedgerEntry | ShakeLedgerEntry) & { type?: string };
+    const allEntries: UnifiedLedgerEntry[] = [
+      ...payments.map(p => ({ ...p, type: p.type || (p.planName ? 'Membership' : 'Debt Collection') } as UnifiedLedgerEntry)),
+      ...consumptions.map(c => ({ ...c, type: 'Consumption' } as UnifiedLedgerEntry))
+    ];
+    allEntries.sort((a, b) => a.createdAt - b.createdAt);
+
+    let cycleAssigned = 0;
+    let cycleConsumed = 0;
+    
     let validUntil: number | undefined = undefined;
     let latestPlanName: string | undefined = undefined;
     let totalFinancialBalance = 0;
 
-    for (const payment of payments) {
-      if (payment.shakesAdded) {
-        totalShakesPurchased += payment.shakesAdded;
-      }
-      if (payment.remainingBalance) {
-        totalFinancialBalance += payment.remainingBalance;
-      }
-      // Determine latest plan name and validity
-      if (!latestPlanName && payment.planName) {
-        latestPlanName = payment.planName;
-      }
-      if (!validUntil && payment.validityDays) {
-        // Validity is calculated from the time of purchase
-        validUntil = payment.createdAt + (payment.validityDays * 24 * 60 * 60 * 1000);
+    for (const entry of allEntries) {
+      if (entry.type === 'Membership' || entry.type === 'Add Shakes') {
+        const payment = entry as PaymentLedgerEntry;
+        const amt = payment.shakesAdded || 0;
+        
+        if (amt > 0) {
+          if (cycleConsumed > cycleAssigned) {
+            const deficit = cycleConsumed - cycleAssigned;
+            cycleAssigned = amt;
+            cycleConsumed = deficit;
+          } else {
+            const surplus = cycleAssigned - cycleConsumed;
+            cycleAssigned = amt + surplus;
+            cycleConsumed = 0;
+          }
+        }
+
+        if (payment.remainingBalance) totalFinancialBalance += payment.remainingBalance;
+        if (payment.planName) latestPlanName = payment.planName;
+        if (payment.validityDays) validUntil = payment.createdAt + (payment.validityDays * 24 * 60 * 60 * 1000);
+
+      } else if (entry.type === 'Debt Collection') {
+        const payment = entry as PaymentLedgerEntry;
+        const amt = payment.shakesAdded || 0;
+        cycleAssigned += amt;
+        
+        if (payment.remainingBalance) totalFinancialBalance += payment.remainingBalance;
+
+      } else if (entry.type === 'Consumption') {
+        const shake = entry as ShakeLedgerEntry;
+        const amt = shake.shakesDeducted || 0;
+        cycleConsumed += amt;
       }
     }
 
-    let totalShakesConsumed = 0;
-    for (const consumption of consumptions) {
-      totalShakesConsumed += consumption.shakesDeducted;
-    }
-
-    const remainingShakes = totalShakesPurchased - totalShakesConsumed;
+    const remainingShakes = cycleAssigned - cycleConsumed;
     // Date expiry is ignored as per new rules, but we keep validUntil for display.
-    const isExpired = (totalShakesPurchased > 0 && remainingShakes <= 0);
+    const isExpired = (cycleAssigned > 0 && remainingShakes <= 0);
 
     return {
       customerId: requestedCustomerId,
-      totalShakesPurchased,
-      totalShakesConsumed,
+      totalShakesPurchased: cycleAssigned,
+      totalShakesConsumed: cycleConsumed,
       remainingShakes,
       latestPlanName,
       validUntil,

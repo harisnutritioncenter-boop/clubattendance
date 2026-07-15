@@ -149,41 +149,57 @@ export default function CustomerProfilePage() {
     setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
   };
 
+  const getCycleStatsAtTime = (timestamp: number, ledgerArray: LedgerEntry[]) => {
+    let cycleAssigned = 0;
+    let cycleConsumed = 0;
+
+    for (const entry of ledgerArray) {
+      if (entry.createdAt > timestamp) break; // Stop exactly at this time
+
+      if (entry.type === 'Membership' || entry.type === 'Add Shakes') {
+        const amt = (entry as PaymentLedgerEntry).shakesAdded || 0;
+        if (amt > 0) {
+          if (cycleConsumed > cycleAssigned) {
+            const deficit = cycleConsumed - cycleAssigned;
+            cycleAssigned = amt;
+            cycleConsumed = deficit;
+          } else {
+            const surplus = cycleAssigned - cycleConsumed;
+            cycleAssigned = amt + surplus;
+            cycleConsumed = 0;
+          }
+        }
+      } else if (entry.type === 'Debt Collection') {
+        cycleAssigned += (entry as PaymentLedgerEntry).shakesAdded || 0;
+      } else if (entry.type === 'Consumption') {
+        cycleConsumed += (entry as ShakeLedgerEntry).shakesDeducted || 0;
+      }
+    }
+    return { cycleAssigned, cycleConsumed };
+  };
+
   const getDayData = (day: number) => {
     const startOfDay = new Date(currentYear, currentMonth, day, 0, 0, 0).getTime();
     const endOfDay = new Date(currentYear, currentMonth, day, 23, 59, 59, 999).getTime();
 
-    let totalAssigned = 0;
-    let totalConsumed = 0;
-    let assignedBeforeToday = 0;
-    let consumedBeforeToday = 0;
+    const startStats = getCycleStatsAtTime(startOfDay - 1, ledger);
+    const endStats = getCycleStatsAtTime(endOfDay, ledger);
+    
     const todaysLogs: LedgerEntry[] = [];
-
-    // Because ledger is sorted chronologically, we just iterate through
     for (const entry of ledger) {
-      if (entry.createdAt > endOfDay) break; // Don't count future events
-
-      const isBeforeToday = entry.createdAt < startOfDay;
-
-      if (entry.type === 'Membership' || entry.type === 'Add Shakes' || entry.type === 'Debt Collection') {
-        const amt = (entry as PaymentLedgerEntry).shakesAdded || 0;
-        totalAssigned += amt;
-        if (isBeforeToday) assignedBeforeToday += amt;
-      } else if (entry.type === 'Consumption') {
-        const amt = (entry as ShakeLedgerEntry).shakesDeducted || 0;
-        totalConsumed += amt;
-        if (isBeforeToday) consumedBeforeToday += amt;
-      }
-
-      // Check if the entry happened ON this specific day
-      if (entry.createdAt >= startOfDay && entry.createdAt <= endOfDay) {
-        if (entry.type === 'Consumption') {
-          todaysLogs.push(entry);
-        }
+      if (entry.createdAt > endOfDay) break;
+      if (entry.createdAt >= startOfDay && entry.type === 'Consumption') {
+        todaysLogs.push(entry);
       }
     }
 
-    return { totalAssigned, totalConsumed, assignedBeforeToday, consumedBeforeToday, todaysLogs };
+    return {
+      totalAssigned: endStats.cycleAssigned,
+      totalConsumed: endStats.cycleConsumed,
+      assignedBeforeToday: startStats.cycleAssigned,
+      consumedBeforeToday: startStats.cycleConsumed,
+      todaysLogs
+    };
   };
 
   const handleDayClick = (logs: LedgerEntry[], day: number) => {
@@ -294,7 +310,8 @@ export default function CustomerProfilePage() {
         isArchived: false,
       } as LedgerEntry;
 
-      setLedger(prev => [...prev, newShakeEntry].sort((a, b) => a.createdAt - b.createdAt));
+      const updatedLedger = [...ledger, newShakeEntry].sort((a, b) => a.createdAt - b.createdAt);
+      setLedger(updatedLedger);
 
       setStatus({
         ...status,
@@ -302,14 +319,15 @@ export default function CustomerProfilePage() {
         totalShakesConsumed: status.totalShakesConsumed + serveCount
       });
       
+      // Calculate exact cycle logic at the time of this service for accurate WhatsApp messages
+      const { cycleAssigned, cycleConsumed } = getCycleStatsAtTime(serveDateObj.getTime(), updatedLedger);
+      
       // Send automated WhatsApp message
       try {
         if (customer && customer.mobile) {
           const formattedDate = formatDate(serveDateObj.getTime());
           const timeStr = serveDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-          const consumed = status.totalShakesConsumed + serveCount;
-          const remaining = status.remainingShakes - serveCount;
-          const total = consumed + remaining;
+          const remaining = cycleAssigned - cycleConsumed;
           
           await fetch('/api/whatsapp', {
             method: 'POST',
@@ -319,8 +337,8 @@ export default function CustomerProfilePage() {
               mobile: customer.mobile,
               date: formattedDate,
               time: timeStr,
-              consumed: consumed,
-              total: total,
+              consumed: cycleConsumed,
+              total: cycleAssigned,
               remaining: remaining
             })
           });
@@ -494,7 +512,7 @@ export default function CustomerProfilePage() {
                   const isFuture = new Date(currentYear, currentMonth, day).getTime() > new Date().getTime();
 
                   const wasFullyConsumedBeforeToday = assignedBeforeToday > 0 && consumedBeforeToday >= assignedBeforeToday;
-                  const showRunningTotal = !isFuture && totalAssigned > 0 && (!wasFullyConsumedBeforeToday || hasConsumedToday);
+                  const showRunningTotal = !isFuture && (totalAssigned > 0 || totalConsumed > 0) && (!wasFullyConsumedBeforeToday || hasConsumedToday);
 
                   return (
                     <div 
@@ -519,7 +537,10 @@ export default function CustomerProfilePage() {
                           <div className={`text-center font-mono text-sm py-1.5 rounded-md ${
                             hasConsumedToday ? 'bg-primary/10 text-primary font-bold' : 'bg-muted text-muted-foreground'
                           }`}>
-                            {totalConsumed} / {totalAssigned}
+                            {totalConsumed > totalAssigned 
+                              ? (totalAssigned - totalConsumed).toString() 
+                              : `${totalConsumed} / ${totalAssigned}`
+                            }
                           </div>
                         </div>
                       )}
