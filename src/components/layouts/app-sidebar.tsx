@@ -27,13 +27,15 @@ import {
   Receipt,
   Download,
   Repeat,
-  Activity
+  Activity,
+  UserCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 export function AppSidebar() {
   const role = useAuthStore((state) => state.role);
+  const user = useAuthStore((state) => state.user);
   const pathname = usePathname();
 
   const adminItems = [
@@ -60,6 +62,7 @@ export function AppSidebar() {
 
   const juniorItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+    { title: 'My Profile', url: `/partners/${user?.uid || ''}`, icon: UserCircle },
     { title: 'Attendance', url: '/consumption', icon: Coffee },
     { title: 'Trials', url: '/trials', icon: UserCheck },
     { title: 'Customers', url: '/customers', icon: Users },

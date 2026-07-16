@@ -26,7 +26,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { offlineMigrationSchema, type OfflineMigrationFormValues } from '../schemas/offline-migration.schema';
 import { CustomerPurpose } from '../types/customer.types';
-import { calculateAge } from '@/lib/utils';
+import { calculateAge, cn, formatDate } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Calendar as CalendarIcon } from 'lucide-react';
 
 const PURPOSES: CustomerPurpose[] = [
   'Weight Loss',
@@ -245,7 +248,12 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
               <FormItem>
                 <FormLabel>Mobile Number</FormLabel>
                 <FormControl>
-                  <Input placeholder="+91 98765 43210" {...field} />
+                  <Input 
+                    type="tel" 
+                    placeholder="Enter mobile number" 
+                    {...field} 
+                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ''))} 
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -346,7 +354,37 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                   )}
                 </FormLabel>
                 <FormControl>
-                  <Input type="date" max={new Date().toISOString().split('T')[0]} {...field} value={field.value || ''} />
+                  <Popover>
+                    <PopoverTrigger 
+                      render={
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        />
+                      }
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {field.value ? formatDate(field.value) : <span>Pick a date</span>}
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="center">
+                      <Calendar
+                        mode="single"
+                        selected={field.value ? new Date(field.value) : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                            field.onChange(localDateStr);
+                          } else {
+                            field.onChange("");
+                          }
+                        }}
+                        disabled={(date) => date > new Date()}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </FormControl>
                 <FormMessage />
               </FormItem>

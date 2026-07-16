@@ -1,5 +1,5 @@
 'use client';
-
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { CustomerService } from '@/features/customers/services/customer.service';
@@ -15,7 +15,9 @@ import { COLLECTIONS } from '@/firebase';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, IndianRupee, Filter, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { Search, IndianRupee, Filter, ChevronDown, ChevronUp, Trash2, Calendar as CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateTime } from '@/lib/utils';
 
@@ -37,11 +39,12 @@ export default function RevenueLogsPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [logToRevert, setLogToRevert] = useState<any>(null);
 
-  // Default to current month
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [startDate, setStartDate] = useState(firstDay.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d;
+  });
+  const [endDate, setEndDate] = useState<Date>(() => new Date());
 
   // Keep selectedClub in sync if they change the global branch via the top nav
   useEffect(() => {
@@ -51,8 +54,9 @@ export default function RevenueLogsPage() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const bId = selectedClub === 'all' ? null : selectedClub;
-      const start = new Date(startDate).getTime();
+      // For Junior Partners, we fetch all records and filter in-memory to catch records created by Admin without a branch ID
+      const bId = authRole === 'junior_partner' ? null : (selectedClub === 'all' ? null : selectedClub);
+      const start = startDate.getTime();
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
 
@@ -63,16 +67,17 @@ export default function RevenueLogsPage() {
 
       const [{ payments }, customersSnap, usersSnap] = await Promise.all([
         LedgerService.getReportsData(bId, start, end.getTime()),
-        CustomerService.getActiveCustomers(bId),
+        getDocs(COLLECTIONS.CUSTOMERS),
         getDocs(COLLECTIONS.USERS)
       ]);
 
       const customerMap: Record<string, string> = {};
       const customerPartnerMap: Record<string, string> = {};
-      customersSnap.forEach(c => {
-        customerMap[c.id] = c.displayId ? `${c.displayId} (${c.name})` : c.name;
+      customersSnap.docs.forEach(doc => {
+        const c = doc.data();
+        customerMap[doc.id] = c.displayId ? `${c.displayId} (${c.name})` : c.name;
         if (c.juniorPartnerId) {
-          customerPartnerMap[c.id] = c.juniorPartnerId;
+          customerPartnerMap[doc.id] = c.juniorPartnerId;
         }
       });
 
@@ -82,17 +87,18 @@ export default function RevenueLogsPage() {
       });
 
       let formattedLogs = payments.map(p => {
-        const partnerId = p.createdBy;
+        const actualPartnerId = customerPartnerMap[p.customerId] || p.createdBy;
         return {
           ...p,
+          actualPartnerId,
           customerName: customerMap[p.customerId] || 'Unknown Customer',
-          partnerName: userMap[partnerId] || 'Admin'
+          partnerName: userMap[actualPartnerId] || 'Admin'
         };
       });
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(p => customerPartnerMap[p.customerId] === user.uid);
+        formattedLogs = formattedLogs.filter(p => (customerPartnerMap[p.customerId] || p.createdBy) === user.uid);
       }
 
       setLogs(formattedLogs);
@@ -107,8 +113,8 @@ export default function RevenueLogsPage() {
   };
 
   const handleRevert = async (log: any) => {
-    if (log.type !== 'Membership') {
-      toast.error('Only membership payments can be reverted here.');
+    if (log.type !== 'Membership' && log.type !== 'Debt Collection') {
+      toast.error('Only membership and debt collection payments can be reverted here.');
       return;
     }
 
@@ -200,11 +206,27 @@ export default function RevenueLogsPage() {
           <CardContent className={cn("p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4", !showMobileFilters && "hidden md:grid")}>
             <div className="space-y-2">
               <Label>Start Date</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <Popover>
+                <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")} />}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {startDate ? format(startDate, "dd MMM yy") : <span>Pick a date</span>}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={startDate} onSelect={(d) => d && setStartDate(d)} />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label>End Date</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Popover>
+                <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")} />}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {endDate ? format(endDate, "dd MMM yy") : <span>Pick a date</span>}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={endDate} onSelect={(d) => d && setEndDate(d)} />
+                </PopoverContent>
+              </Popover>
             </div>
             
             {authRole === 'super_admin' && (
@@ -317,12 +339,18 @@ export default function RevenueLogsPage() {
                       <TableCell className="font-medium whitespace-nowrap">{log.customerName}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.planName || log.type}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.paymentMethod}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{log.partnerName}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                        {log.actualPartnerId ? (
+                          <Link href={`/partners/${log.actualPartnerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
+                            {log.partnerName}
+                          </Link>
+                        ) : log.partnerName}
+                      </TableCell>
                       <TableCell className="text-right font-bold text-green-600">
                         ₹{log.amount?.toLocaleString()}
                       </TableCell>
                       <TableCell>
-                        {log.type === 'Membership' && (
+                        {(log.type === 'Membership' || log.type === 'Debt Collection') && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -348,14 +376,17 @@ export default function RevenueLogsPage() {
           <DialogHeader>
             <DialogTitle className="text-destructive flex items-center gap-2">
               <Trash2 className="h-5 w-5" />
-              Void Membership Assignment
+              Void {logToRevert?.type === 'Debt Collection' ? 'Debt Collection' : 'Membership Assignment'}
             </DialogTitle>
             <DialogDescription className="pt-2 text-base">
-              Are you sure you want to void the <span className="font-semibold text-foreground">{logToRevert?.planName || 'Membership'}</span> assignment for <span className="font-semibold text-foreground">{logToRevert?.customerName}</span>?
+              Are you sure you want to void the <span className="font-semibold text-foreground">{logToRevert?.planName || logToRevert?.type}</span> transaction for <span className="font-semibold text-foreground">{logToRevert?.customerName}</span>?
             </DialogDescription>
           </DialogHeader>
           <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
-            Are you sure you want to revert the payment of <strong>₹{logToRevert?.amount?.toLocaleString()}</strong> received on {logToRevert ? formatDateTime(logToRevert.createdAt) : ''}? This will logically refund the payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative.
+            Are you sure you want to revert the payment of <strong>₹{logToRevert?.amount?.toLocaleString()}</strong> received on {logToRevert ? formatDateTime(logToRevert.createdAt) : ''}? 
+            {logToRevert?.type === 'Debt Collection' 
+              ? " This will logically refund the payment and immediately add this amount back to their pending debt balance." 
+              : " This will logically refund the payment and immediately subtract the shakes from their available balance. If they have already consumed those shakes, their balance will become negative."}
           </div>
           <DialogFooter className="sm:justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setLogToRevert(null)}>Cancel</Button>

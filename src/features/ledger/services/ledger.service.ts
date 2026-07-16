@@ -294,7 +294,7 @@ export class LedgerService {
         data.juniorPartnerId,
         data.shakesDeducted,
         voidedBy,
-        `Refund for voided consumption: ${consumptionId}`
+        'Refund for voided consumption'
       );
     }
   }

@@ -1,5 +1,5 @@
 'use client';
-
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { CustomerService } from '@/features/customers/services/customer.service';
@@ -14,7 +14,9 @@ import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Coffee, Filter, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { Search, Coffee, Filter, ChevronDown, ChevronUp, Trash2, Calendar as CalendarIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatDateTime } from '@/lib/utils';
 
@@ -31,6 +33,7 @@ export default function ConsumptionLogsPage() {
   const [selectedClub, setSelectedClub] = useState<string>(globalBranchId || 'all');
   const [selectedCustomer, setSelectedCustomer] = useState('all');
   const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
+  const [selectedJuniorPartners, setSelectedJuniorPartners] = useState<string[]>([]);
   
   const [branches, setBranches] = useState<any[]>([]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -38,8 +41,12 @@ export default function ConsumptionLogsPage() {
   // Default to current month
   const today = new Date();
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [startDate, setStartDate] = useState(firstDay.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(today.toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d;
+  });
+  const [endDate, setEndDate] = useState<Date>(() => new Date());
 
   // Keep selectedClub in sync if they change the global branch via the top nav
   useEffect(() => {
@@ -49,8 +56,9 @@ export default function ConsumptionLogsPage() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const bId = selectedClub === 'all' ? null : selectedClub;
-      const start = new Date(startDate).getTime();
+      // For Junior Partners, we fetch all records and filter in-memory to catch records created by Admin without a branch ID
+      const bId = authRole === 'junior_partner' ? null : (selectedClub === 'all' ? null : selectedClub);
+      const start = startDate.getTime();
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
 
@@ -61,16 +69,17 @@ export default function ConsumptionLogsPage() {
 
       const [{ consumptions }, customersSnap, usersSnap] = await Promise.all([
         LedgerService.getReportsData(bId, start, end.getTime()),
-        CustomerService.getActiveCustomers(bId),
+        getDocs(COLLECTIONS.CUSTOMERS),
         getDocs(COLLECTIONS.USERS)
       ]);
 
       const customerMap: Record<string, string> = {};
       const customerPartnerMap: Record<string, string> = {};
-      customersSnap.forEach(c => {
-        customerMap[c.id] = c.displayId ? `${c.displayId} (${c.name})` : c.name;
+      customersSnap.docs.forEach(doc => {
+        const c = doc.data();
+        customerMap[doc.id] = c.displayId ? `${c.displayId} (${c.name})` : c.name;
         if (c.juniorPartnerId) {
-          customerPartnerMap[c.id] = c.juniorPartnerId;
+          customerPartnerMap[doc.id] = c.juniorPartnerId;
         }
       });
 
@@ -81,22 +90,27 @@ export default function ConsumptionLogsPage() {
 
       let formattedLogs = consumptions.map(c => {
         const partnerId = c.createdBy;
+        const assignedJpId = customerPartnerMap[c.customerId];
         return {
           ...c,
+          partnerId,
+          assignedJpId,
           customerName: customerMap[c.customerId] || 'Unknown Customer',
-          partnerName: userMap[partnerId] || 'Admin'
+          partnerName: userMap[partnerId] || 'Admin',
+          juniorPartnerName: assignedJpId ? (userMap[assignedJpId] || 'Unknown') : 'None'
         };
       });
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(c => customerPartnerMap[c.customerId] === user.uid);
+        formattedLogs = formattedLogs.filter(c => (customerPartnerMap[c.customerId] || c.createdBy) === user.uid);
       }
 
       setLogs(formattedLogs);
       // reset secondary filters when data updates
       setSelectedCustomer('all');
       setSelectedPartners([]);
+      setSelectedJuniorPartners([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -150,13 +164,18 @@ export default function ConsumptionLogsPage() {
     if (selectedPartners.length > 0) {
       result = result.filter(log => selectedPartners.includes(log.partnerName));
     }
+    
+    if (selectedJuniorPartners.length > 0) {
+      result = result.filter(log => selectedJuniorPartners.includes(log.juniorPartnerName));
+    }
 
     setFilteredLogs(result);
-  }, [searchTerm, selectedCustomer, selectedPartners, logs]);
+  }, [searchTerm, selectedCustomer, selectedPartners, selectedJuniorPartners, logs]);
 
   const uniqueCustomers = Array.from(new Set(logs.map(l => l.customerName))).sort();
   const uniquePartners = Array.from(new Set(logs.map(l => l.partnerName))).sort();
-  const totalShakes = filteredLogs.reduce((acc, log) => acc + (log.shakesDeducted || 0), 0);
+  const uniqueJuniorPartners = Array.from(new Set(logs.map(l => l.juniorPartnerName).filter(n => n !== 'None'))).sort();
+  const totalShakes = filteredLogs.reduce((acc, log) => acc + (log.shakesDeducted || 1), 0);
 
   return (
     <div className="space-y-6">
@@ -190,11 +209,27 @@ export default function ConsumptionLogsPage() {
           <CardContent className={cn("p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4", !showMobileFilters && "hidden md:grid")}>
             <div className="space-y-2">
               <Label>Start Date</Label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <Popover>
+                <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !startDate && "text-muted-foreground")} />}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {startDate ? format(startDate, "dd MMM yy") : <span>Pick a date</span>}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={startDate} onSelect={(d) => d && setStartDate(d)} />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label>End Date</Label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Popover>
+                <PopoverTrigger render={<Button variant="outline" className={cn("w-full justify-start text-left font-normal", !endDate && "text-muted-foreground")} />}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {endDate ? format(endDate, "dd MMM yy") : <span>Pick a date</span>}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={endDate} onSelect={(d) => d && setEndDate(d)} />
+                </PopoverContent>
+              </Popover>
             </div>
             
             {authRole === 'super_admin' && (
@@ -223,6 +258,42 @@ export default function ConsumptionLogsPage() {
                   {uniqueCustomers.map(c => <SelectItem key={c as string} value={c as string}>{c as string}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Junior Partner</Label>
+              <Popover>
+                <PopoverTrigger
+                  className="w-full justify-start text-left font-normal h-10 border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 border rounded-md"
+                >
+                  {selectedJuniorPartners.length === 0 
+                    ? "All Junior Partners" 
+                    : `${selectedJuniorPartners.length} selected`}
+                </PopoverTrigger>
+                <PopoverContent className="w-[220px] p-2" align="start">
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {uniqueJuniorPartners.map(p => (
+                      <div key={p as string} className="flex items-center space-x-2">
+                        <Checkbox 
+                          id={`jp-${p}`}
+                          checked={selectedJuniorPartners.includes(p as string)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedJuniorPartners([...selectedJuniorPartners, p as string]);
+                            } else {
+                              setSelectedJuniorPartners(selectedJuniorPartners.filter(x => x !== p));
+                            }
+                          }}
+                        />
+                        <label htmlFor={`jp-${p}`} className="text-sm font-medium leading-none cursor-pointer">
+                          {p as string}
+                        </label>
+                      </div>
+                    ))}
+                    {uniqueJuniorPartners.length === 0 && <div className="text-sm text-muted-foreground p-2">No junior partners found</div>}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             
             <div className="space-y-2">
@@ -296,6 +367,7 @@ export default function ConsumptionLogsPage() {
                     <TableHead>Consumed By</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead>Marked By</TableHead>
+                    <TableHead>Junior Partner</TableHead>
                     <TableHead className="text-right">Deducted</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -307,7 +379,20 @@ export default function ConsumptionLogsPage() {
                       <TableCell className="font-medium whitespace-nowrap">{log.customerName}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.consumedBy || '-'}</TableCell>
                       <TableCell className="max-w-[150px] sm:max-w-[200px] truncate" title={log.notes}>{log.notes || '-'}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{log.partnerName}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                        {log.partnerId ? (
+                          <Link href={`/partners/${log.partnerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
+                            {log.partnerName}
+                          </Link>
+                        ) : log.partnerName}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                        {log.assignedJpId ? (
+                          <Link href={`/partners/${log.assignedJpId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
+                            {log.juniorPartnerName}
+                          </Link>
+                        ) : (log.juniorPartnerName === 'None' ? '-' : log.juniorPartnerName)}
+                      </TableCell>
                       <TableCell className="text-right font-bold text-orange-600">
                         -{log.shakesDeducted}
                       </TableCell>

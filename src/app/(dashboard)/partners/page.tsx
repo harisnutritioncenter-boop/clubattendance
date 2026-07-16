@@ -326,17 +326,19 @@ export default function PartnersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight text-primary">Staff & Partners</h2>
-          <p className="text-muted-foreground">Manage Junior Partners and Club Owners.</p>
+        <div className="space-y-1 pr-2">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-primary break-words">
+            Club Owners & Junior Partners
+          </h2>
+          {/* <p className="text-muted-foreground">Manage Junior Partners and Club Owners.</p> */}
         </div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger render={<Button className="gap-2" />}>
-            <Plus className="h-4 w-4" /> Add Staff
+            <Plus className="h-4 w-4" /> Add 
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New Staff Member</DialogTitle>
+              <DialogTitle>Create New Member</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreateUser} className="space-y-4 pt-4">
               <div className="space-y-2">

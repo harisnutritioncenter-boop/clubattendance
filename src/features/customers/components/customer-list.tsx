@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { useEffect, useState, useMemo } from 'react';
 import { formatDate } from '@/lib/utils';
 import { useBranchStore, useAuthStore } from '@/store';
@@ -35,7 +36,7 @@ import { ContactActions } from "@/components/ui/contact-actions";
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
-export function CustomerList() {
+export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string }) {
   const { activeBranchId } = useBranchStore();
   const authState = useAuthStore(state => state);
   
@@ -95,7 +96,9 @@ export function CustomerList() {
         // Filter out trial customers
         data = data.filter(c => c.isTrial !== true);
         
-        if (authState.role === 'junior_partner' && authState.user) {
+        if (filterByPartnerId) {
+          data = data.filter(c => c.juniorPartnerId === filterByPartnerId);
+        } else if (authState.role === 'junior_partner' && authState.user) {
           data = data.filter(c => c.juniorPartnerId === authState.user!.uid);
         }
         
@@ -295,7 +298,7 @@ export function CustomerList() {
             <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export Excel</span><span className="sm:hidden">Export</span>
           </Button>
         </div>
-        <div id="customer-filters" className="grid grid-cols-4 gap-2 py-2">
+        <div id="customer-filters" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 py-2">
           <div className="w-full min-w-0">
             <label className="text-[10px] sm:text-xs font-semibold text-muted-foreground mb-1 block truncate">Status</label>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v || '')}>
@@ -310,23 +313,25 @@ export function CustomerList() {
             </Select>
           </div>
 
-          <div className="w-full min-w-0">
-            <label className="text-[10px] sm:text-xs font-semibold text-muted-foreground mb-1 block truncate">Partner</label>
-            <Select value={jpFilter} onValueChange={(v) => setJpFilter(v || '')}>
-              <SelectTrigger className="h-8 px-1.5 sm:px-3 text-[10px] sm:text-xs">
-                <SelectValue placeholder="Partner">
-                  {jpFilter === 'ALL' ? 'All' : jpFilter === 'UNASSIGNED' ? 'Unassigned' : (partners[jpFilter] ? partners[jpFilter].split(' ')[0] : 'Partner')}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL" className="text-xs">All</SelectItem>
-                <SelectItem value="UNASSIGNED" className="text-xs">Unassigned</SelectItem>
-                {Object.entries(partners).map(([id, name]) => (
-                  <SelectItem key={id} value={id} className="text-xs">{name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!filterByPartnerId && (
+            <div className="w-full min-w-0">
+              <label className="text-[10px] sm:text-xs font-semibold text-muted-foreground mb-1 block truncate">Partner</label>
+              <Select value={jpFilter} onValueChange={(v) => setJpFilter(v || '')}>
+                <SelectTrigger className="h-8 px-1.5 sm:px-3 text-[10px] sm:text-xs">
+                  <SelectValue placeholder="Partner">
+                    {jpFilter === 'ALL' ? 'All' : jpFilter === 'UNASSIGNED' ? 'Unassigned' : (partners[jpFilter] ? partners[jpFilter].split(' ')[0] : 'Partner')}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL" className="text-xs">All</SelectItem>
+                  <SelectItem value="UNASSIGNED" className="text-xs">Unassigned</SelectItem>
+                  {Object.entries(partners).map(([id, name]) => (
+                    <SelectItem key={id} value={id} className="text-xs">{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {authState.role === 'super_admin' && (
             <div className="w-full min-w-0">
@@ -428,9 +433,17 @@ export function CustomerList() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="bg-secondary px-2 py-1 rounded-md text-xs font-medium">
-                        {pName}
-                      </span>
+                      {customer.juniorPartnerId ? (
+                        <Link href={`/partners/${customer.juniorPartnerId}`} onClick={(e) => e.stopPropagation()}>
+                          <span className="bg-secondary px-2 py-1 rounded-md text-xs font-medium hover:underline text-primary">
+                            {pName}
+                          </span>
+                        </Link>
+                      ) : (
+                        <span className="bg-secondary px-2 py-1 rounded-md text-xs font-medium">
+                          {pName}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">

@@ -5,6 +5,8 @@ import { useAuthStore, useBranchStore } from '@/store';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { CustomerService } from '@/features/customers/services/customer.service';
 import Link from 'next/link';
+import { getDocs } from 'firebase/firestore';
+import { COLLECTIONS } from '@/firebase';
 
 export function JuniorDashboard() {
   const user = useAuthStore(state => state.user);
@@ -24,11 +26,25 @@ export function JuniorDashboard() {
       try {
         const bId = branchId || 'default-branch';
         
-        // 1. Get Customers added by this user
-        const allCustomers = await CustomerService.getActiveCustomers(bId);
-        const myCustomers = allCustomers.filter(c => c.createdBy === user.uid);
-        const myTrials = myCustomers.filter(c => c.isTrial).length;
-        const myMembers = myCustomers.length - myTrials;
+        // 1. Get ALL customers to build a complete map for ledger referencing
+        const allCustomersSnap = await getDocs(COLLECTIONS.CUSTOMERS);
+        const customerPartnerMap: Record<string, string> = {};
+        const activeMyCustomers: any[] = [];
+        
+        allCustomersSnap.forEach(doc => {
+          const c = doc.data();
+          if (c.juniorPartnerId) {
+            customerPartnerMap[doc.id] = c.juniorPartnerId;
+          }
+          if (!c.isArchived && (c.juniorPartnerId || c.createdBy) === user.uid) {
+            if (!bId || bId === 'default-branch' || c.branchId === bId) {
+               activeMyCustomers.push(c);
+            }
+          }
+        });
+
+        const myTrials = activeMyCustomers.filter(c => c.isTrial).length;
+        const myMembers = activeMyCustomers.length - myTrials;
         
         // 2. Get today's consumption
         const now = new Date();
@@ -36,21 +52,20 @@ export function JuniorDashboard() {
         const startOfDay = now.getTime();
         const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
         
-        // Fetch all branch ledgers for the month (we'll just use a wide range to be safe)
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-        const reports = await LedgerService.getReportsData(bId, startOfMonth, endOfDay);
+        // Fetch all branch ledgers for all-time up to today (fetch globally so we don't miss admin records)
+        const reports = await LedgerService.getReportsData(null, 0, endOfDay);
         
         // Filter for this user's actions
-        const myPayments = reports.payments.filter(p => p.createdBy === user.uid);
+        const myPayments = reports.payments.filter(p => (customerPartnerMap[p.customerId] || p.createdBy) === user.uid);
         const myRevenue = myPayments.reduce((acc, p) => acc + p.amount, 0);
         const myConversions = myPayments.filter(p => p.notes?.includes('Membership Assigned')).length;
 
         const myConsumptionsToday = reports.consumptions.filter(c => 
-          c.createdBy === user.uid && 
+          (customerPartnerMap[c.customerId] || c.createdBy) === user.uid && 
           c.createdAt >= startOfDay && 
           c.createdAt <= endOfDay
         );
-        const todayConsumption = myConsumptionsToday.reduce((acc, c) => acc + c.shakesDeducted, 0);
+        const todayConsumption = myConsumptionsToday.reduce((acc, c) => acc + (c.shakesDeducted || 1), 0);
 
         // Fetch remaining inventory
         const { PartnerInventoryService } = await import('@/features/partners/services/partner-inventory.service');

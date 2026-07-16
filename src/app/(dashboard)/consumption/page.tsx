@@ -189,8 +189,8 @@ export default function ConsumptionPage() {
     <div className="max-w-2xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-primary">Attendance</h1>
-          <p className="text-muted-foreground">Select a customer to mark their attendance and deduct from their ledger.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-primary"> Mark Attendance</h1>
+          {/* <p className="text-muted-foreground">Select a customer to mark their attendance and deduct from their ledger.</p> */}
         </div>
         <div className="flex flex-col items-end gap-2">
           <Dialog open={isAddTrialOpen} onOpenChange={setIsAddTrialOpen}>
