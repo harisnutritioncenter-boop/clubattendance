@@ -32,15 +32,17 @@ interface ComboboxProps {
   emptyText?: string;
   onAddNew?: () => void;
   addNewText?: string;
+  id?: string;
 }
 
-export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No option found.", onAddNew, addNewText }: ComboboxProps) {
+export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No option found.", onAddNew, addNewText, id }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

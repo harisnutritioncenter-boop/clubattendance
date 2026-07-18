@@ -85,7 +85,9 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
     <>
       <TableRow>
         <TableCell className="font-medium">
-          {partner.name || 'Unnamed'}
+          <Link href={`/partners/${partner.id}`} className="hover:underline hover:text-primary transition-colors cursor-pointer">
+            {partner.name || 'Unnamed'}
+          </Link>
           {partner.mobile && (
             <div className="flex items-center gap-2 mt-1 font-normal">
               <span className="text-xs text-muted-foreground">{partner.mobile}</span>

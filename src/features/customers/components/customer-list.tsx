@@ -55,6 +55,7 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
   const [clubFilter, setClubFilter] = useState('ALL');
   const [purposeFilter, setPurposeFilter] = useState('ALL');
   const [inventoryFilter, setInventoryFilter] = useState('ALL');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -281,8 +282,8 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
       {/* CRM Filter Toolbar */}
       <div className="flex flex-col space-y-4">
         {/* Always Visible Search */}
-        <div className="flex flex-row gap-4 items-end">
-          <div className="flex-1 w-full">
+        <div className="flex flex-row gap-2 sm:gap-4 items-end">
+          <div className="flex-1 w-full min-w-0">
             <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Search Customers</label>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -294,11 +295,14 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
               />
             </div>
           </div>
-          <Button variant="outline" className="w-auto gap-2" onClick={exportToExcel}>
+          <Button variant="outline" size="icon" className="md:hidden shrink-0 h-10 w-10" onClick={() => setShowMobileFilters(!showMobileFilters)}>
+            <Filter className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" className="w-auto gap-2 shrink-0 h-10" onClick={exportToExcel}>
             <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export Excel</span><span className="sm:hidden">Export</span>
           </Button>
         </div>
-        <div id="customer-filters" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 py-2">
+        <div id="customer-filters" className={`grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 py-2 ${showMobileFilters ? 'grid' : 'hidden md:grid'}`}>
           <div className="w-full min-w-0">
             <label className="text-[10px] sm:text-xs font-semibold text-muted-foreground mb-1 block truncate">Status</label>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v || '')}>

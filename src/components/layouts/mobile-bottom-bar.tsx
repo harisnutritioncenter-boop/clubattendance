@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, Coffee, UserCheck } from 'lucide-react';
+import { Users, Coffee, UserCheck, BarChart } from 'lucide-react';
 import { useAuthStore } from '@/store';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +13,7 @@ export function MobileBottomBar() {
   const navItems = [
     { title: 'Customers', url: '/customers', icon: Users },
     { title: 'Attendance', url: '/consumption', icon: Coffee },
+    { title: 'Analytics', url: '/analytics', icon: BarChart },
     { title: 'Partners', url: '/partners', icon: UserCheck, hideForJunior: true },
   ];
 

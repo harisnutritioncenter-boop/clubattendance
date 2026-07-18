@@ -28,7 +28,8 @@ import {
   Download,
   Repeat,
   Activity,
-  UserCircle
+  UserCircle,
+  BarChart
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -50,6 +51,7 @@ export function AppSidebar() {
     { title: 'Renewals', url: '/renewals', icon: Repeat },
     { title: 'Revenue Logs', url: '/revenue-logs', icon: Receipt },
     { title: 'Consumption Logs', url: '/consumption-logs', icon: Coffee },
+    { title: 'Analytics', url: '/analytics', icon: BarChart },
     { title: 'Reports', url: '/reports', icon: FileText },
     { title: 'Settings', url: '/settings', icon: Settings },
   ];
@@ -72,6 +74,7 @@ export function AppSidebar() {
     { title: 'Renewals', url: '/renewals', icon: Repeat },
     { title: 'Revenue Logs', url: '/revenue-logs', icon: Receipt },
     { title: 'Consumption Logs', url: '/consumption-logs', icon: Coffee },
+    { title: 'Analytics', url: '/analytics', icon: BarChart },
     { title: 'Reports', url: '/reports', icon: FileText },
   ];
 

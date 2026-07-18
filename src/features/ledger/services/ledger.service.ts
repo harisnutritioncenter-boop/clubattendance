@@ -67,6 +67,7 @@ export class LedgerService {
 
     const newDoc = await addDoc(COLLECTIONS.SHAKE_LEDGER, cleanPayload({
       ...data,
+      branchId: data.branchId === 'default-branch' ? (consumer?.branchId || data.branchId) : data.branchId,
       customerId: chargeToCustomerId,
       consumedBy: consumedByName,
       juniorPartnerId: consumer?.juniorPartnerId || null,

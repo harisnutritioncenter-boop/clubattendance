@@ -168,9 +168,13 @@ export default function ConsumptionPage() {
       }
       
       setSuccess(true);
+      toast.success(`Marked ${serveCount} attendance(s) for ${selectedCustomer?.name || 'Customer'}`);
+      
       setTimeout(() => {
-        // Optionally auto-clear
-      }, 3000);
+        // Auto-open search for next customer
+        document.getElementById('customer-search-combobox')?.click();
+      }, 500);
+      
       
     } catch (error) {
       console.error(error);
@@ -185,12 +189,20 @@ export default function ConsumptionPage() {
   const assignedPartnerName = assignedPartnerId ? partners[assignedPartnerId] : 'None';
   const assignedPartnerInventory = assignedPartnerId ? partnerInventories[assignedPartnerId] : null;
 
+  const canClickCustomer = 
+    role === 'super_admin' ? true :
+    role === 'club_owner' ? selectedCustomer?.branchId === branchId :
+    role === 'junior_partner' ? selectedCustomer?.juniorPartnerId === user?.uid : false;
+
+  const canClickPartner =
+    role === 'super_admin' ? true :
+    role === 'club_owner' ? selectedCustomer?.branchId === branchId : false;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-primary"> Mark Attendance</h1>
-          {/* <p className="text-muted-foreground">Select a customer to mark their attendance and deduct from their ledger.</p> */}
+        <div className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-primary"> Mark Attendance</h1>
         </div>
         <div className="flex flex-col items-end gap-2">
           <Dialog open={isAddTrialOpen} onOpenChange={setIsAddTrialOpen}>
@@ -224,15 +236,22 @@ export default function ConsumptionPage() {
       </div>
 
       <Card className="border-2 shadow-lg">
-        <CardHeader className="pb-4 border-b bg-muted/20">
-          <div className="flex flex-col md:flex-row md:items-end gap-6 relative">
+        <CardHeader className="pb-3 border-b bg-muted/20">
+          <div className="flex flex-col md:flex-row md:items-end gap-3 relative">
             <div className="flex-1">
-              <CardTitle className="mb-1">Find Customer</CardTitle>
-              <CardDescription className="mb-3">Search by Name, Mobile, or HC-ID</CardDescription>
+              <CardTitle className="mb-0.5">Find Customer</CardTitle>
+              <CardDescription className="mb-1.5">Search by Name, Mobile, or HC-ID</CardDescription>
               <Combobox 
+                id="customer-search-combobox"
                 options={customerOptions}
                 value={selectedCustomerId}
-                onChange={setSelectedCustomerId}
+                onChange={(val) => {
+                  setSelectedCustomerId(val);
+                  if (success) {
+                    setSuccess(false);
+                    setServeCount(1);
+                  }
+                }}
                 placeholder="Search customers..."
               />
             </div>
@@ -275,7 +294,7 @@ export default function ConsumptionPage() {
           </div>
         </CardHeader>
         
-        <CardContent className="pt-6">
+        <CardContent className="pt-4">
           {!selectedCustomerId ? (
             <div className="text-center py-12 text-muted-foreground">
               <GlassWater className="mx-auto h-12 w-12 opacity-20 mb-4" />
@@ -290,9 +309,15 @@ export default function ConsumptionPage() {
               
 
               {/* Customer Name */}
-              <div className="text-center mb-6 flex flex-col items-center justify-center gap-2">
+              <div className="text-center mb-4 flex flex-col items-center justify-center gap-2">
                 <h2 className="text-2xl font-bold flex items-center gap-2">
-                  {selectedCustomer?.name}
+                  {canClickCustomer && selectedCustomer ? (
+                    <Link href={`/customers/${selectedCustomer.id}`} className="hover:underline text-primary">
+                      {selectedCustomer.name}
+                    </Link>
+                  ) : (
+                    selectedCustomer?.name
+                  )}
                 </h2>
                 <div className="flex items-center gap-2">
                   {selectedCustomer?.isTrial && (
@@ -308,15 +333,15 @@ export default function ConsumptionPage() {
 
               {/* Attendance Action Area */}
               {success ? (
-                <div className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 p-8 rounded-xl text-center border border-green-200 dark:border-green-800 animate-in zoom-in-95 duration-300 flex flex-col items-center justify-center space-y-4 mb-8">
-                  <div className="h-16 w-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-2">
-                    <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
+                <div className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 p-6 rounded-xl text-center border border-green-200 dark:border-green-800 animate-in zoom-in-95 duration-300 flex flex-col items-center justify-center space-y-3 mb-4">
+                  <div className="h-12 w-12 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-1">
+                    <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
                     <h3 className="text-xl font-bold">Attendance Marked!</h3>
                     <p className="text-sm mt-1 opacity-90">{serveCount} attendance(s) deducted from {selectedCustomer?.name}.</p>
                   </div>
-                  <Button variant="outline" className="mt-4" onClick={() => {
+                  <Button variant="outline" className="mt-2" onClick={() => {
                     setSuccess(false);
                     setServeCount(1);
                   }}>
@@ -324,9 +349,9 @@ export default function ConsumptionPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-6 mb-8">
-                  <div className="flex flex-col items-center gap-4 p-6 bg-muted/30 rounded-xl border border-dashed">
-                    <p className="text-lg font-medium">How many attendances?</p>
+                <div className="space-y-4 mb-4">
+                  <div className="flex flex-col items-center gap-3 p-4 bg-muted/30 rounded-xl border border-dashed">
+                    <p className="text-base font-medium">How many attendances?</p>
                     <div className="flex items-center gap-6 bg-background p-2 rounded-full shadow-sm border">
                       <Button 
                         variant="ghost" 
@@ -353,7 +378,7 @@ export default function ConsumptionPage() {
 
                   <Button 
                     size="lg" 
-                    className="w-full h-14 text-lg font-bold" 
+                    className="w-full h-12 text-lg font-bold" 
                     onClick={handleServe}
                     disabled={loading}
                   >
@@ -364,9 +389,19 @@ export default function ConsumptionPage() {
               )}
 
               {/* Partner Info Banner */}
-              <div className="bg-muted p-3 rounded-md flex items-center justify-between mb-6">
+              <div className="bg-muted p-2 sm:p-3 rounded-md flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-sm font-medium">Assigned Partner: <span className="text-primary">{assignedPartnerName}</span></p>
+                  <p className="text-sm font-medium">
+                    Assigned Partner: <span className="text-primary">
+                      {canClickPartner && assignedPartnerId ? (
+                        <Link href={`/partners/${assignedPartnerId}`} className="hover:underline">
+                          {assignedPartnerName}
+                        </Link>
+                      ) : (
+                        assignedPartnerName
+                      )}
+                    </span>
+                  </p>
                   {assignedPartnerInventory !== null && (
                     <p className={`text-xs ${assignedPartnerInventory <= 10 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
                       Partner Inventory: {assignedPartnerInventory} shakes remaining
