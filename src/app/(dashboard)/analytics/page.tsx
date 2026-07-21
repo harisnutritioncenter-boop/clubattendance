@@ -16,6 +16,9 @@ import { formatDateTime } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CalendarDays, CreditCard } from 'lucide-react';
+import { TrialsAnalytics } from './components/trials-analytics';
+import { MembershipAnalytics } from './components/membership-analytics';
+import { RevenueAnalytics } from './components/revenue-analytics';
 
 const monthNames = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -38,6 +41,7 @@ function AnalyticsPageContent() {
   const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth());
   const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
   const [activeTab, setActiveTab] = useState("attendance");
+  const [isTrialsDrilledDown, setIsTrialsDrilledDown] = useState(false);
   
   const [consumptions, setConsumptions] = useState<ShakeLedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -222,23 +226,23 @@ function AnalyticsPageContent() {
       <div className="space-y-3 mt-6 animate-in slide-in-from-right-4 duration-300">
         <h2 className="text-xl font-bold mb-4 text-foreground">Clubs Overview</h2>
         {sortedClubs.map(([bId, total], index) => (
-          <div 
-            key={bId} 
-            onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${bId}`)}
-            className="flex items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm"
-          >
-            <div className="flex items-center gap-4">
-              <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-              <div className="p-3 bg-primary/10 rounded-lg text-primary">
-                <Building className="h-6 w-6" />
+            <div 
+              key={bId} 
+              onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${bId}`)}
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4"
+            >
+              <div className="flex items-center gap-4">
+                <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
+                <div className="p-3 bg-primary/10 rounded-lg text-primary shrink-0">
+                  <Building className="h-6 w-6" />
+                </div>
+                <div className="font-semibold text-lg text-foreground">{clubs[bId] || 'Unknown Club'}</div>
               </div>
-              <div className="font-semibold text-lg text-foreground">{clubs[bId] || 'Unknown Club'}</div>
+              <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-auto shrink-0">
+                <Badge variant="secondary" className="text-base px-3 py-1 bg-primary/5">{total} Shakes</Badge>
+                <ChevronRightIcon className="h-5 w-5 text-muted-foreground hidden sm:block" />
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Badge variant="secondary" className="text-base px-3 py-1 bg-primary/5">{total} Shakes</Badge>
-              <ChevronRightIcon className="h-5 w-5 text-muted-foreground" />
-            </div>
-          </div>
         ))}
       </div>
     );
@@ -266,18 +270,23 @@ function AnalyticsPageContent() {
           sortedPartners.map(([pId, total], index) => (
             <div 
               key={pId} 
-              className="flex items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 transition-all shadow-sm group"
+              onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${selectedClubId}&partnerId=${pId}`)}
+              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-4"
             >
               <div className="flex items-center gap-4">
                 <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                <div className="p-3 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400">
+                <div className="p-3 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
                   <Users className="h-6 w-6" />
                 </div>
                 <div className="flex flex-col">
                   {pId === 'unassigned' ? (
                     <span className="font-semibold text-lg text-foreground">Unassigned / Admin</span>
                   ) : partners[pId] ? (
-                    <Link href={`/partners/${pId}`} className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground">
+                    <Link 
+                      href={`/partners/${pId}`} 
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10"
+                    >
                       {partners[pId]}
                     </Link>
                   ) : (
@@ -285,16 +294,9 @@ function AnalyticsPageContent() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-auto shrink-0">
                 <Badge variant="secondary" className="text-base px-3 py-1 bg-primary/5">{total} Shakes</Badge>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="rounded-full group-hover:bg-primary/10 group-hover:text-primary shrink-0"
-                  onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${selectedClubId}&partnerId=${pId}`)}
-                >
-                  <ChevronRightIcon className="h-5 w-5" />
-                </Button>
+                <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
               </div>
             </div>
           ))
@@ -382,7 +384,7 @@ function AnalyticsPageContent() {
   return (
     <div className="p-4 sm:p-6 pb-24 md:pb-6 max-w-6xl mx-auto min-h-screen">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className={`w-full overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent mb-4 sm:mb-6 ${selectedDateStr ? 'hidden' : 'block'}`}>
+        <div className={`w-full overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent mb-4 sm:mb-6 ${(selectedDateStr || isTrialsDrilledDown) ? 'hidden' : 'block'}`}>
           <TabsList className="inline-flex w-max min-w-full h-11 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground">
             <TabsTrigger value="attendance" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><CalendarDays className="h-4 w-4" /> Attendance</TabsTrigger>
             <TabsTrigger value="trials" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><Activity className="h-4 w-4" /> Trials</TabsTrigger>
@@ -462,21 +464,46 @@ function AnalyticsPageContent() {
         </TabsContent>
 
         <TabsContent value="trials" className="mt-0">
-          <div className="p-8 text-center text-muted-foreground bg-card rounded-2xl border border-dashed shadow-sm">
-            Trials analytics coming soon...
-          </div>
+          <TrialsAnalytics 
+            currentMonth={currentMonth}
+            currentYear={currentYear}
+            role={role}
+            user={user}
+            activeBranchId={activeBranchId}
+            clubs={clubs}
+            partners={partners}
+            onDrillDownStateChange={setIsTrialsDrilledDown}
+            onPrevMonth={prevMonth}
+            onNextMonth={nextMonth}
+          />
         </TabsContent>
 
         <TabsContent value="membership" className="mt-0">
-          <div className="p-8 text-center text-muted-foreground bg-card rounded-2xl border border-dashed shadow-sm">
-            Membership analytics coming soon...
-          </div>
+          <MembershipAnalytics 
+            currentMonth={currentMonth}
+            currentYear={currentYear}
+            role={role}
+            user={user}
+            activeBranchId={activeBranchId}
+            clubs={clubs}
+            partners={partners}
+            onPrevMonth={prevMonth}
+            onNextMonth={nextMonth}
+          />
         </TabsContent>
 
         <TabsContent value="revenue" className="mt-0">
-          <div className="p-8 text-center text-muted-foreground bg-card rounded-2xl border border-dashed shadow-sm">
-            Revenue analytics coming soon...
-          </div>
+          <RevenueAnalytics 
+            currentMonth={currentMonth}
+            currentYear={currentYear}
+            role={role}
+            user={user}
+            activeBranchId={activeBranchId}
+            clubs={clubs}
+            partners={partners}
+            onPrevMonth={prevMonth}
+            onNextMonth={nextMonth}
+          />
         </TabsContent>
       </Tabs>
     </div>

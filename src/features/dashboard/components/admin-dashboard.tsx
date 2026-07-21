@@ -43,10 +43,12 @@ export function AdminDashboard() {
       
       if (!isActive) return;
 
-      const members = customers.length;
+      const trialCount = customers.filter(c => c.isTrial).length;
+      const membersCount = customers.length - trialCount;
+
       setMetrics({
-        activeMembers: members,
-        trialCustomers: 0,
+        activeMembers: membersCount,
+        trialCustomers: trialCount,
         revenue,
         consumptionsToday: consumptions
       });

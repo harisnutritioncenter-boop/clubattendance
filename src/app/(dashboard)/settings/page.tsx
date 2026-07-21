@@ -15,6 +15,7 @@ import Link from 'next/link';
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general');
   const user = useAuthStore(state => state.user);
+  const role = useAuthStore(state => state.role);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -94,15 +95,15 @@ export default function SettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2 mt-4">
-                  <Label>My Profile</Label>
-                  <p className="text-sm text-muted-foreground mb-2">View your performance metrics, inventory, and edit your profile details.</p>
-                  {user && (
+                {user && role !== 'super_admin' && (
+                  <div className="grid gap-2 mt-4">
+                    <Label>My Profile</Label>
+                    <p className="text-sm text-muted-foreground mb-2">View your performance metrics, inventory, and edit your profile details.</p>
                     <Link href={`/partners/${user.uid}`}>
                       <Button variant="outline">View My Profile</Button>
                     </Link>
-                  )}
-                </div>
+                  </div>
+                )}
                 <Button className="mt-4">Save Changes</Button>
               </CardContent>
             </Card>

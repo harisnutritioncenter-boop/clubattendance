@@ -97,6 +97,104 @@ export class LedgerService {
     return newDoc.id;
   }
 
+  static async getAllCustomerBalances(branchId: string | null): Promise<Record<string, CustomerMembershipStatus & { planAssignedAt?: number }>> {
+    // 1. Fetch all non-archived payments
+    const paymentsQuery = branchId 
+      ? query(COLLECTIONS.PAYMENT_LEDGER, where('branchId', '==', branchId), where('isArchived', '==', false))
+      : query(COLLECTIONS.PAYMENT_LEDGER, where('isArchived', '==', false));
+    
+    const paymentsSnap = await getDocs(paymentsQuery);
+    const payments = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentLedgerEntry));
+
+    // 2. Fetch all non-archived consumptions
+    const consumptionsQuery = branchId
+      ? query(COLLECTIONS.SHAKE_LEDGER, where('branchId', '==', branchId), where('isArchived', '==', false))
+      : query(COLLECTIONS.SHAKE_LEDGER, where('isArchived', '==', false));
+      
+    const consumptionsSnap = await getDocs(consumptionsQuery);
+    const consumptions = consumptionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry));
+
+    // 3. Group by customerId
+    const customerEntries: Record<string, ((PaymentLedgerEntry | ShakeLedgerEntry) & { type?: string })[]> = {};
+
+    payments.forEach(p => {
+      if (!customerEntries[p.customerId]) customerEntries[p.customerId] = [];
+      customerEntries[p.customerId].push({ ...p, type: p.type || (p.planName ? 'Membership' : 'Debt Collection') });
+    });
+
+    consumptions.forEach(c => {
+      if (!customerEntries[c.customerId]) customerEntries[c.customerId] = [];
+      customerEntries[c.customerId].push({ ...c, type: 'Consumption' });
+    });
+
+    // 4. Calculate balances
+    const balances: Record<string, CustomerMembershipStatus & { planAssignedAt?: number }> = {};
+
+    for (const [customerId, entries] of Object.entries(customerEntries)) {
+      entries.sort((a, b) => a.createdAt - b.createdAt);
+
+      let cycleAssigned = 0;
+      let cycleConsumed = 0;
+      let validUntil: number | undefined = undefined;
+      let latestPlanName: string | undefined = undefined;
+      let planAssignedAt: number | undefined = undefined;
+      let totalFinancialBalance = 0;
+
+      for (const entry of entries) {
+        if (entry.type === 'Membership' || entry.type === 'Add Shakes') {
+          const payment = entry as PaymentLedgerEntry;
+          const amt = payment.shakesAdded || 0;
+          
+          if (amt > 0) {
+            if (cycleConsumed > cycleAssigned) {
+              const deficit = cycleConsumed - cycleAssigned;
+              cycleAssigned = amt;
+              cycleConsumed = deficit;
+            } else {
+              const surplus = cycleAssigned - cycleConsumed;
+              cycleAssigned = amt + surplus;
+              cycleConsumed = 0;
+            }
+          }
+
+          if (payment.remainingBalance) totalFinancialBalance += payment.remainingBalance;
+          if (payment.planName) {
+            latestPlanName = payment.planName;
+            planAssignedAt = payment.createdAt; // Store the date this plan was assigned
+          }
+          if (payment.validityDays) validUntil = payment.createdAt + (payment.validityDays * 24 * 60 * 60 * 1000);
+
+        } else if (entry.type === 'Debt Collection') {
+          const payment = entry as PaymentLedgerEntry;
+          const amt = payment.shakesAdded || 0;
+          cycleAssigned += amt;
+          if (payment.remainingBalance) totalFinancialBalance += payment.remainingBalance;
+
+        } else if (entry.type === 'Consumption') {
+          const shake = entry as ShakeLedgerEntry;
+          const amt = shake.shakesDeducted || 0;
+          cycleConsumed += amt;
+        }
+      }
+
+      const remainingShakes = cycleAssigned - cycleConsumed;
+      const isExpired = (cycleAssigned > 0 && remainingShakes <= 0);
+
+      balances[customerId] = {
+        customerId,
+        totalShakesPurchased: cycleAssigned,
+        totalShakesConsumed: cycleConsumed,
+        remainingShakes,
+        latestPlanName,
+        planAssignedAt,
+        validUntil,
+        isExpired,
+        remainingBalance: totalFinancialBalance
+      };
+    }
+
+    return balances;
+  }
 
   static async getCustomerBalance(requestedCustomerId: string): Promise<CustomerMembershipStatus> {
     // 1. Resolve Family Account

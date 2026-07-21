@@ -39,11 +39,7 @@ export default function RevenueLogsPage() {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [logToRevert, setLogToRevert] = useState<any>(null);
 
-  const [startDate, setStartDate] = useState<Date>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d;
-  });
+  const [startDate, setStartDate] = useState<Date>(() => new Date());
   const [endDate, setEndDate] = useState<Date>(() => new Date());
 
   // Keep selectedClub in sync if they change the global branch via the top nav
@@ -82,8 +78,10 @@ export default function RevenueLogsPage() {
       });
 
       const userMap: Record<string, string> = {};
+      const userRoleMap: Record<string, string> = {};
       usersSnap.docs.forEach(d => {
         userMap[d.id] = d.data().name || d.data().email || d.id;
+        userRoleMap[d.id] = d.data().role;
       });
 
       let formattedLogs = payments.map(p => {
@@ -92,7 +90,8 @@ export default function RevenueLogsPage() {
           ...p,
           actualPartnerId,
           customerName: customerMap[p.customerId] || 'Unknown Customer',
-          partnerName: userMap[actualPartnerId] || 'Admin'
+          partnerName: userMap[actualPartnerId] || 'Admin',
+          partnerRole: userRoleMap[actualPartnerId]
         };
       });
 
@@ -336,11 +335,15 @@ export default function RevenueLogsPage() {
                   {filteredLogs.map((log) => (
                     <TableRow key={log.id}>
                       <TableCell className="whitespace-nowrap">{formatDateTime(log.createdAt)}</TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">{log.customerName}</TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">
+                        <Link href={`/customers/${log.customerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
+                          {log.customerName}
+                        </Link>
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">{log.planName || log.type}</TableCell>
                       <TableCell className="whitespace-nowrap">{log.paymentMethod}</TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                        {log.actualPartnerId ? (
+                        {log.actualPartnerId && log.partnerRole === 'junior_partner' ? (
                           <Link href={`/partners/${log.actualPartnerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
                             {log.partnerName}
                           </Link>

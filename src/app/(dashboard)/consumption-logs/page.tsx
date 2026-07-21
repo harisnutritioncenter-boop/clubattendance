@@ -41,11 +41,7 @@ export default function ConsumptionLogsPage() {
   // Default to current month
   const today = new Date();
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-  const [startDate, setStartDate] = useState<Date>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d;
-  });
+  const [startDate, setStartDate] = useState<Date>(() => new Date());
   const [endDate, setEndDate] = useState<Date>(() => new Date());
 
   // Keep selectedClub in sync if they change the global branch via the top nav
@@ -84,8 +80,10 @@ export default function ConsumptionLogsPage() {
       });
 
       const userMap: Record<string, string> = {};
+      const userRoleMap: Record<string, string> = {};
       usersSnap.docs.forEach(d => {
         userMap[d.id] = d.data().name || d.data().email || d.id;
+        userRoleMap[d.id] = d.data().role;
       });
 
       let formattedLogs = consumptions.map(c => {
@@ -97,7 +95,9 @@ export default function ConsumptionLogsPage() {
           assignedJpId,
           customerName: customerMap[c.customerId] || 'Unknown Customer',
           partnerName: userMap[partnerId] || 'Admin',
-          juniorPartnerName: assignedJpId ? (userMap[assignedJpId] || 'Unknown') : 'None'
+          partnerRole: userRoleMap[partnerId],
+          juniorPartnerName: assignedJpId ? (userMap[assignedJpId] || 'Unknown') : 'None',
+          juniorPartnerRole: assignedJpId ? userRoleMap[assignedJpId] : null
         };
       });
 
@@ -376,18 +376,28 @@ export default function ConsumptionLogsPage() {
                   {filteredLogs.map((log) => (
                     <TableRow key={log.id}>
                       <TableCell className="whitespace-nowrap">{formatDateTime(log.createdAt)}</TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">{log.customerName}</TableCell>
-                      <TableCell className="whitespace-nowrap">{log.consumedBy || '-'}</TableCell>
+                      <TableCell className="font-medium whitespace-nowrap">
+                        <Link href={`/customers/${log.customerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
+                          {log.customerName}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {log.consumedBy ? (
+                          <Link href={`/customers/${log.customerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
+                            {log.consumedBy}
+                          </Link>
+                        ) : '-'}
+                      </TableCell>
                       <TableCell className="max-w-[150px] sm:max-w-[200px] truncate" title={log.notes}>{log.notes || '-'}</TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                        {log.partnerId ? (
+                        {log.partnerId && log.partnerRole === 'junior_partner' ? (
                           <Link href={`/partners/${log.partnerId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
                             {log.partnerName}
                           </Link>
                         ) : log.partnerName}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
-                        {log.assignedJpId ? (
+                        {log.assignedJpId && log.juniorPartnerRole === 'junior_partner' ? (
                           <Link href={`/partners/${log.assignedJpId}`} className="hover:underline text-primary" onClick={(e) => e.stopPropagation()}>
                             {log.juniorPartnerName}
                           </Link>
