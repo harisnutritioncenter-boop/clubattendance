@@ -29,6 +29,7 @@ export default function FamilyPage() {
   const [open, setOpen] = useState(false);
   
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFamily, setSelectedFamily] = useState<FamilyGroup | null>(null);
 
   const branchId = useBranchStore(state => state.activeBranchId);
@@ -70,6 +71,7 @@ export default function FamilyPage() {
     const bId = branchId || 'default-branch';
     if (!bId || !user) return;
     
+    setIsSubmitting(true);
     const validMembers = memberIds.filter(id => id.trim() !== '');
 
     try {
@@ -85,6 +87,8 @@ export default function FamilyPage() {
       loadData();
     } catch (error) {
       console.error(error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -160,8 +164,8 @@ export default function FamilyPage() {
                 <Link href="/customers" className="text-primary hover:underline">Go to Customers</Link>
               </div>
 
-              <Button type="submit" className="w-full mt-4" disabled={!primaryCustomerId}>
-                Create Family
+              <Button type="submit" className="w-full mt-4" disabled={!primaryCustomerId || isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create Family"}
               </Button>
             </form>
           </DialogContent>

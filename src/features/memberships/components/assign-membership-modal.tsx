@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { MembershipService } from '../services/membership.service';
 import { MembershipPlan } from '../types/membership.types';
 import { useAuthStore, useBranchStore } from '@/store';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 
 interface AssignMembershipModalProps {
@@ -97,20 +98,18 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
         <form onSubmit={handleAssign} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="plan">Select Plan</Label>
-            <select
-              id="plan"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={selectedPlanId}
-              onChange={e => setSelectedPlanId(e.target.value)}
-              required
-            >
-              <option value="">-- Choose a Plan --</option>
-              {plans.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.isTrialPlan ? '[TRIAL PLAN] ' : ''}{p.name} - ₹{p.price} ({p.shakesCount} shakes / {p.validityDays} days)
-                </option>
-              ))}
-            </select>
+            <Select value={selectedPlanId} onValueChange={(val) => setSelectedPlanId(val || '')} required>
+              <SelectTrigger id="plan" className="w-full">
+                <SelectValue placeholder="-- Choose a Plan --" />
+              </SelectTrigger>
+              <SelectContent>
+                {plans.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.isTrialPlan ? '[TRIAL PLAN] ' : ''}{p.name} - ₹{p.price} ({p.shakesCount} shakes / {p.validityDays} days)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {selectedPlan && !selectedPlan.isTrialPlan && (
@@ -179,18 +178,17 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
               {paymentType !== 'Due' && (
                 <div className="space-y-2">
                   <Label htmlFor="payment">Payment Method</Label>
-                  <select
-                    id="payment"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={paymentMethod}
-                    onChange={e => setPaymentMethod(e.target.value as any)}
-                    required
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                  </select>
+                  <Select value={paymentMethod} onValueChange={(val: any) => setPaymentMethod(val)} required>
+                    <SelectTrigger id="payment" className="w-full">
+                      <SelectValue placeholder="Select Payment Method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Card">Card</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </>

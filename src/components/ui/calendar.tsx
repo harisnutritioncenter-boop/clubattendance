@@ -11,12 +11,14 @@ import {
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 function Calendar({
   className,
   classNames,
   showOutsideDays = true,
-  captionLayout = "label",
+  captionLayout = "dropdown",
   buttonVariant = "ghost",
   locale,
   formatters,
@@ -30,6 +32,8 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      startMonth={props.startMonth || new Date(1900, 0)}
+      endMonth={props.endMonth || new Date(2100, 11)}
       className={cn(
         "group/calendar bg-background p-2 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(7)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
@@ -171,6 +175,45 @@ function Calendar({
                 {children}
               </div>
             </td>
+          )
+        },
+        Dropdown: ({ value, onChange, options, ...props }: any) => {
+          const selected = options?.find((child: any) => child.value === value)
+          const handleChange = (value: string) => {
+            const changeEvent = {
+              target: { value },
+            } as React.ChangeEvent<HTMLSelectElement>
+            onChange?.(changeEvent)
+          }
+          return (
+            <div 
+              className="relative flex items-center"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <Select
+                value={value?.toString()}
+                onValueChange={(value) => {
+                  handleChange(value)
+                }}
+              >
+                <SelectTrigger className="h-8 w-fit pr-1.5 focus:ring-0 font-medium">
+                  <SelectValue>{selected?.label}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                <ScrollArea className="h-60">
+                  {options?.map((option: any, id: number) => (
+                    <SelectItem
+                      key={`${option.value}-${id}`}
+                      value={option.value?.toString() ?? ""}
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </ScrollArea>
+                </SelectContent>
+              </Select>
+            </div>
           )
         },
         ...components,

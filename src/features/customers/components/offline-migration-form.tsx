@@ -415,7 +415,36 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                 <FormItem>
                   <FormLabel>Plan Start Date</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Popover>
+                      <PopoverTrigger 
+                        render={
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          />
+                        }
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {field.value ? formatDate(field.value) : <span>Pick a date</span>}
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="center">
+                        <Calendar
+                          mode="single"
+                          selected={field.value ? new Date(field.value) : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                              field.onChange(localDateStr);
+                            } else {
+                              field.onChange("");
+                            }
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -556,7 +585,36 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                   <FormItem>
                     <FormLabel>Payment Received Date</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Popover>
+                        <PopoverTrigger 
+                          render={
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            />
+                          }
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {field.value ? formatDate(field.value) : <span>Pick a date</span>}
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="center">
+                          <Calendar
+                            mode="single"
+                            selected={field.value ? new Date(field.value) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                                field.onChange(localDateStr);
+                              } else {
+                                field.onChange("");
+                              }
+                            }}
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -704,7 +762,9 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
               Cancel
             </Button>
           )}
-          <Button type="submit">Migrate Offline Customer</Button>
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? "Migrating..." : "Migrate Offline Customer"}
+          </Button>
         </div>
       </form>
     </Form>

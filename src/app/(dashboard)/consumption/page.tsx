@@ -440,7 +440,7 @@ export default function ConsumptionPage() {
                   <div className="text-center">
                     <p className="text-xs sm:text-sm text-muted-foreground">Marked</p>
                     <p className="text-base sm:text-lg font-medium">
-                      {balance.totalShakesConsumed} / {balance.remainingShakes > 0 ? balance.totalShakesConsumed + balance.remainingShakes : balance.totalShakesConsumed}
+                      {balance.totalShakesConsumed} / {balance.totalShakesPurchased}
                     </p>
                   </div>
                 </div>

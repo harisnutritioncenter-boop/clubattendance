@@ -25,6 +25,7 @@ export default function MembershipsPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<MembershipPlan | null>(null);
   const role = useAuthStore(state => state.role);
 
@@ -52,6 +53,7 @@ export default function MembershipsPage() {
 
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       await MembershipService.createPlan({
         name,
@@ -113,7 +115,9 @@ export default function MembershipsPage() {
                     Make it for Trials
                   </Label>
                 </div>
-                <Button type="submit" className="w-full mt-4">Save Plan</Button>
+                <Button type="submit" className="w-full mt-4" disabled={isSubmitting}>
+                  {isSubmitting ? "Saving..." : "Save Plan"}
+                </Button>
               </form>
             </DialogContent>
           </Dialog>

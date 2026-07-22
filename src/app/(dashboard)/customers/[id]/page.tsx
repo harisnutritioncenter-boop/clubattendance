@@ -58,8 +58,9 @@ export default function CustomerProfilePage() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
-  const [paymentToRevert, setPaymentToRevert] = useState<PaymentLedgerEntry | null>(null);
   const [consumptionToRevert, setConsumptionToRevert] = useState<ShakeLedgerEntry | null>(null);
+  const [paymentToRevert, setPaymentToRevert] = useState<PaymentLedgerEntry | null>(null);
+  const [isSubmittingRevert, setIsSubmittingRevert] = useState(false);
 
   // Attendance Mark State
   const [isMarkAttendanceOpen, setIsMarkAttendanceOpen] = useState(false);
@@ -222,6 +223,7 @@ export default function CustomerProfilePage() {
 
   const confirmRevertConsumption = async () => {
     if (!consumptionToRevert) return;
+    setIsSubmittingRevert(true);
     try {
       await LedgerService.voidConsumption(consumptionToRevert.id!, user?.uid || 'system');
       toast.success('Consumption reverted successfully');
@@ -238,6 +240,8 @@ export default function CustomerProfilePage() {
       setConsumptionToRevert(null);
     } catch (error: any) {
       toast.error('Failed to revert consumption: ' + error.message);
+    } finally {
+      setIsSubmittingRevert(false);
     }
   };
 
@@ -259,6 +263,8 @@ export default function CustomerProfilePage() {
 
   const confirmRevertPayment = async () => {
     if (!paymentToRevert) return;
+    setIsSubmittingRevert(true);
+    
     try {
       await LedgerService.voidPayment(paymentToRevert.id!, user?.uid || 'system');
       toast.success('Membership assignment reverted successfully');
@@ -275,6 +281,8 @@ export default function CustomerProfilePage() {
       setPaymentToRevert(null);
     } catch (error: any) {
       toast.error('Failed to revert assignment: ' + error.message);
+    } finally {
+      setIsSubmittingRevert(false);
     }
   };
 
@@ -537,10 +545,7 @@ export default function CustomerProfilePage() {
                           <div className={`text-center font-mono text-sm py-1.5 rounded-md ${
                             hasConsumedToday ? 'bg-primary/10 text-primary font-bold' : 'bg-muted text-muted-foreground'
                           }`}>
-                            {totalConsumed > totalAssigned 
-                              ? (totalAssigned - totalConsumed).toString() 
-                              : `${totalConsumed} / ${totalAssigned}`
-                            }
+                            {`${totalConsumed} / ${totalAssigned}`}
                           </div>
                         </div>
                       )}
@@ -703,7 +708,9 @@ export default function CustomerProfilePage() {
           </div>
           <DialogFooter className="sm:justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setConsumptionToRevert(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmRevertConsumption}>Yes, Revert Consumption</Button>
+            <Button variant="destructive" onClick={confirmRevertConsumption} disabled={isSubmittingRevert}>
+              {isSubmittingRevert ? "Reverting..." : "Yes, Revert Consumption"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -725,7 +732,9 @@ export default function CustomerProfilePage() {
           </div>
           <DialogFooter className="sm:justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setPaymentToRevert(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmRevertPayment}>Yes, Void Assignment</Button>
+            <Button variant="destructive" onClick={confirmRevertPayment} disabled={isSubmittingRevert}>
+              {isSubmittingRevert ? "Reverting..." : "Yes, Void Assignment"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

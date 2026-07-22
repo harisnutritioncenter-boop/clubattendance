@@ -26,6 +26,7 @@ interface PlanDetailsModalProps {
 
 export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDetailsModalProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const user = useAuthStore(state => state.user);
   
   // Edit Form State
@@ -49,6 +50,7 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    setIsSaving(true);
     
     try {
       const changes = [];
@@ -87,6 +89,8 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
       onSuccess();
     } catch (error: any) {
       toast.error('Failed to update plan: ' + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -159,7 +163,9 @@ export function PlanDetailsModal({ plan, open, onOpenChange, onSuccess }: PlanDe
             </div>
             <DialogFooter className="mt-4 gap-2 flex-col sm:flex-row">
               <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
-              <Button type="submit">Save Changes</Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
             </DialogFooter>
           </form>
         ) : (
