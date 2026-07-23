@@ -99,7 +99,7 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
           <div className="space-y-2">
             <Label>Select Plan</Label>
             <Select value={selectedPlanId} onValueChange={(val) => setSelectedPlanId(val || '')} required>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full text-base sm:text-sm">
                 {selectedPlan ? (
                   <span className="truncate">
                     {selectedPlan.isTrialPlan ? '[TRIAL PLAN] ' : ''}{selectedPlan.name} - ₹{selectedPlan.price} ({selectedPlan.shakesCount} shakes / {selectedPlan.validityDays} days)
@@ -170,7 +170,7 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
                       value={partialAmount}
                       onChange={(e) => setPartialAmount(e.target.value ? Number(e.target.value) : '')}
                       required={paymentType === 'Partial'}
-                      className="mt-1"
+                      className="mt-1 text-base sm:text-sm"
                     />
                     {partialAmount && (
                       <p className="text-xs text-destructive mt-1 font-medium">
@@ -185,7 +185,7 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
                 <div className="space-y-2">
                   <Label>Payment Method</Label>
                   <Select value={paymentMethod} onValueChange={(val: any) => setPaymentMethod(val)} required>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full text-base sm:text-sm">
                       {paymentMethod ? (
                         <span>{paymentMethod}</span>
                       ) : (
