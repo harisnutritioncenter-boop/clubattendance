@@ -489,6 +489,22 @@ export class LedgerService {
       updatedAt: Date.now(),
       revertedBy
     });
+
+    if (data.customerId && data.type === 'Membership') {
+      const customerDocRef = doc(COLLECTIONS.CUSTOMERS, data.customerId);
+      const customerSnap = await getDoc(customerDocRef);
+      if (customerSnap.exists()) {
+        const cData = customerSnap.data();
+        if (cData.isTrial) {
+          await updateDoc(customerDocRef, {
+            isTrial: false,
+            wasTrial: true,
+            trialConvertedAt: Date.now()
+          });
+          CustomerService.clearCache();
+        }
+      }
+    }
   }
 }
 

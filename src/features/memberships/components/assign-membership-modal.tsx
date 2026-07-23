@@ -97,12 +97,18 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
         </DialogHeader>
         <form onSubmit={handleAssign} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="plan">Select Plan</Label>
+            <Label>Select Plan</Label>
             <Select value={selectedPlanId} onValueChange={(val) => setSelectedPlanId(val || '')} required>
-              <SelectTrigger id="plan" className="w-full">
-                <SelectValue placeholder="-- Choose a Plan --" />
+              <SelectTrigger className="w-full">
+                {selectedPlan ? (
+                  <span className="truncate">
+                    {selectedPlan.isTrialPlan ? '[TRIAL PLAN] ' : ''}{selectedPlan.name} - ₹{selectedPlan.price} ({selectedPlan.shakesCount} shakes / {selectedPlan.validityDays} days)
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">-- Choose a Plan --</span>
+                )}
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent alignItemWithTrigger={false}>
                 {plans.map(p => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.isTrialPlan ? '[TRIAL PLAN] ' : ''}{p.name} - ₹{p.price} ({p.shakesCount} shakes / {p.validityDays} days)
@@ -177,12 +183,16 @@ export function AssignMembershipModal({ customerId, customerName, open, onOpenCh
               
               {paymentType !== 'Due' && (
                 <div className="space-y-2">
-                  <Label htmlFor="payment">Payment Method</Label>
+                  <Label>Payment Method</Label>
                   <Select value={paymentMethod} onValueChange={(val: any) => setPaymentMethod(val)} required>
-                    <SelectTrigger id="payment" className="w-full">
-                      <SelectValue placeholder="Select Payment Method" />
+                    <SelectTrigger className="w-full">
+                      {paymentMethod ? (
+                        <span>{paymentMethod}</span>
+                      ) : (
+                        <span className="text-muted-foreground">Select Payment Method</span>
+                      )}
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent alignItemWithTrigger={false}>
                       <SelectItem value="Cash">Cash</SelectItem>
                       <SelectItem value="Card">Card</SelectItem>
                       <SelectItem value="UPI">UPI</SelectItem>

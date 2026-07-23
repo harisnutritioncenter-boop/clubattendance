@@ -279,6 +279,10 @@ export default function CustomerProfilePage() {
         });
       }
       setPaymentToRevert(null);
+      // Force a hard reload to ensure customer trial flags and Assign Membership button instantly resync
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (error: any) {
       toast.error('Failed to revert assignment: ' + error.message);
     } finally {
@@ -452,8 +456,25 @@ export default function CustomerProfilePage() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle>Membership & Health</CardTitle>
+                {status?.latestPlanName && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-8 text-destructive border-destructive hover:bg-destructive/10" 
+                    onClick={() => {
+                      const latestMembership = [...ledger].reverse().find(l => l.type === 'Membership');
+                      if (latestMembership) {
+                        handleRevertPayment(latestMembership as PaymentLedgerEntry);
+                      } else {
+                        toast.error("No membership assignment found to revoke.");
+                      }
+                    }}
+                  >
+                    Revoke Plan
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-y-4 text-sm">

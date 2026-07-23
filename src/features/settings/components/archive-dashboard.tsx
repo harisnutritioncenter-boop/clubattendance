@@ -55,7 +55,9 @@ export function ArchiveDashboard() {
 
       if (q) {
         const snap = await getDocs(q);
-        setArchivedData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        data.sort((a: any, b: any) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+        setArchivedData(data);
       }
     } catch (err) {
       console.error(err);
