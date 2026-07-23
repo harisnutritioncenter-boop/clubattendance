@@ -16,7 +16,7 @@ import { COLLECTIONS } from '@/firebase';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('branch');
+  const [activeTab, setActiveTab] = useState('archive');
   const user = useAuthStore(state => state.user);
   const role = useAuthStore(state => state.role);
   const activeBranchId = useBranchStore(state => state.activeBranchId);
@@ -101,13 +101,13 @@ export default function SettingsPage() {
       <div className="flex flex-col md:flex-row gap-6">
         <aside className="w-full md:w-64 flex flex-col gap-2">
 
-          <Button 
+          {/* <Button 
             variant={activeTab === 'branch' ? 'default' : 'ghost'} 
             className="justify-start gap-2"
             onClick={() => setActiveTab('branch')}
           >
             <Building2 className="w-4 h-4" /> Branch Info
-          </Button>
+          </Button> */}
           <Button 
             variant={activeTab === 'archive' ? 'default' : 'ghost'} 
             className="justify-start gap-2"
@@ -134,7 +134,7 @@ export default function SettingsPage() {
         <div className="flex-1 space-y-6">
 
 
-          {activeTab === 'branch' && (
+          {/* {activeTab === 'branch' && (
             <Card>
               <CardHeader>
                 <CardTitle>Branch Information</CardTitle>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                 </Button>
               </CardContent>
             </Card>
-          )}
+          )} */}
 
           {/* {activeTab === 'notifications' && (
             <Card>
