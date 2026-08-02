@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
+import { CustomerService } from '@/features/customers/services/customer.service';
 import { useAuthStore, useBranchStore } from '@/store';
 import { toast } from 'sonner';
 
@@ -54,12 +55,15 @@ export function CollectPaymentModal({
 
     setLoading(true);
     try {
+      const customer = await CustomerService.getCustomer(customerId);
+
       // Create a debt collection entry
       // amount is positive (we received money)
       // remainingBalance is negative (reduces the global due balance)
       await LedgerService.addPayment({
         customerId,
         branchId,
+        juniorPartnerId: customer?.juniorPartnerId,
         amount: numAmount,
         paymentMethod: paymentMethod as any,
         type: 'Debt Collection',

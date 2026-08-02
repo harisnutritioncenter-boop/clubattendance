@@ -27,12 +27,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, User, Package, CreditCard, Building2, CalendarDays, Phone, Mail, MapPin, Trash2, ChevronLeft, ChevronRight, PackagePlus, Users } from 'lucide-react';
+import { ArrowLeft, User, Package, CreditCard, Building2, CalendarDays, Phone, Mail, MapPin, Trash2, ChevronLeft, ChevronRight, PackagePlus, Users, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateAge, formatDate, formatDateTime } from '@/lib/utils';
 import { PartnerForm } from '@/features/partners/components/partner-form';
 import { ManageShakesModal } from '@/features/partners/components/add-shakes-modal';
 import { CustomerList } from '@/features/customers/components/customer-list';
+import { TrialList } from '@/features/customers/components/trial-list';
 
 // Helper to get days in month
 function getDaysInMonth(year: number, month: number) {
@@ -387,6 +388,7 @@ export default function PartnerProfilePage() {
             <TabsTrigger value="inventory" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><Package className="h-4 w-4" /> Inventory Activity</TabsTrigger>
             <TabsTrigger value="payments" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><CreditCard className="h-4 w-4" /> Collections</TabsTrigger>
             <TabsTrigger value="customers" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><Users className="h-4 w-4" /> Customers</TabsTrigger>
+            <TabsTrigger value="trials" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><UserCheck className="h-4 w-4" /> Trials</TabsTrigger>
           </TabsList>
         </div>
 
@@ -590,6 +592,10 @@ export default function PartnerProfilePage() {
               <CustomerList filterByPartnerId={partnerId} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="trials" className="mt-0">
+          <TrialList filterByPartnerId={partnerId} />
         </TabsContent>
       </Tabs>
 

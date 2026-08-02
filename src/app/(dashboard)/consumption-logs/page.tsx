@@ -32,6 +32,7 @@ export default function ConsumptionLogsPage() {
   
   const [selectedClub, setSelectedClub] = useState<string>(globalBranchId || 'all');
   const [selectedCustomer, setSelectedCustomer] = useState('all');
+  const [selectedBatch, setSelectedBatch] = useState('all');
   const [selectedPartners, setSelectedPartners] = useState<string[]>([]);
   const [selectedJuniorPartners, setSelectedJuniorPartners] = useState<string[]>([]);
   
@@ -162,6 +163,10 @@ export default function ConsumptionLogsPage() {
       result = result.filter(log => log.customerName === selectedCustomer);
     }
     
+    if (selectedBatch !== 'all') {
+      result = result.filter(log => (log.batchName || 'None') === selectedBatch);
+    }
+    
     if (selectedPartners.length > 0) {
       result = result.filter(log => selectedPartners.includes(log.partnerName));
     }
@@ -171,9 +176,10 @@ export default function ConsumptionLogsPage() {
     }
 
     setFilteredLogs(result);
-  }, [searchTerm, selectedCustomer, selectedPartners, selectedJuniorPartners, logs]);
+  }, [searchTerm, selectedCustomer, selectedBatch, selectedPartners, selectedJuniorPartners, logs]);
 
   const uniqueCustomers = Array.from(new Set(logs.map(l => l.customerName))).sort();
+  const uniqueBatches = Array.from(new Set(logs.map(l => l.batchName || 'None'))).sort();
   const uniquePartners = Array.from(new Set(logs.map(l => l.partnerName))).sort();
   const uniqueJuniorPartners = Array.from(new Set(logs.map(l => l.juniorPartnerName).filter(n => n !== 'None'))).sort();
   const totalShakes = filteredLogs.reduce((acc, log) => acc + (log.shakesDeducted || 1), 0);
@@ -257,6 +263,17 @@ export default function ConsumptionLogsPage() {
                 <SelectContent>
                   <SelectItem value="all">All Customers</SelectItem>
                   {uniqueCustomers.map(c => <SelectItem key={c as string} value={c as string}>{c as string}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Batch</Label>
+              <Select value={selectedBatch} onValueChange={(v) => setSelectedBatch(v || '')}>
+                <SelectTrigger><SelectValue placeholder="All Batches" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Batches</SelectItem>
+                  {uniqueBatches.map(b => <SelectItem key={b as string} value={b as string}>{b as string}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -366,6 +383,7 @@ export default function ConsumptionLogsPage() {
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Primary Customer</TableHead>
                     <TableHead>Consumed By</TableHead>
+                    <TableHead>Batch</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead>Marked By</TableHead>
                     <TableHead>Junior Partner</TableHead>
@@ -389,6 +407,7 @@ export default function ConsumptionLogsPage() {
                           </Link>
                         ) : '-'}
                       </TableCell>
+                      <TableCell className="whitespace-nowrap">{log.batchName || '-'}</TableCell>
                       <TableCell className="max-w-[150px] sm:max-w-[200px] truncate" title={log.notes}>{log.notes || '-'}</TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                         {log.partnerId && log.partnerRole === 'junior_partner' ? (

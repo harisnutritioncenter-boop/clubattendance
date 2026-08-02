@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Building2, Bell, Settings2, ShieldCheck, ArchiveRestore } from 'lucide-react';
+import { Building2, Bell, Settings2, ShieldCheck, ArchiveRestore, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { ArchiveDashboard } from '@/features/settings/components/archive-dashboard';
+import { BatchesDashboard } from '@/features/settings/components/batches-dashboard';
 import { useAuthStore, useBranchStore } from '@/store';
 import Link from 'next/link';
 import { doc, getDoc, getDocs, updateDoc, query, limit } from 'firebase/firestore';
@@ -114,6 +115,13 @@ export default function SettingsPage() {
             onClick={() => setActiveTab('archive')}
           >
             <ArchiveRestore className="w-4 h-4" /> Archive & Recovery
+          </Button>
+          <Button 
+            variant={activeTab === 'batches' ? 'default' : 'ghost'} 
+            className="justify-start gap-2"
+            onClick={() => setActiveTab('batches')}
+          >
+            <Clock className="w-4 h-4" /> Batches
           </Button>
           {/* <Button 
             variant={activeTab === 'notifications' ? 'default' : 'ghost'} 
@@ -223,6 +231,9 @@ export default function SettingsPage() {
           )} */}
           {activeTab === 'archive' && (
             <ArchiveDashboard />
+          )}
+          {activeTab === 'batches' && (
+            <BatchesDashboard />
           )}
         </div>
       </div>

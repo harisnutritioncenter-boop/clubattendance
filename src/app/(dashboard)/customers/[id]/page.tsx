@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ContactActions } from '@/components/ui/contact-actions';
@@ -61,6 +62,7 @@ export default function CustomerProfilePage() {
   const [consumptionToRevert, setConsumptionToRevert] = useState<ShakeLedgerEntry | null>(null);
   const [paymentToRevert, setPaymentToRevert] = useState<PaymentLedgerEntry | null>(null);
   const [isSubmittingRevert, setIsSubmittingRevert] = useState(false);
+  const [batches, setBatches] = useState<any[]>([]);
 
   // Attendance Mark State
   const [isMarkAttendanceOpen, setIsMarkAttendanceOpen] = useState(false);
@@ -68,6 +70,7 @@ export default function CustomerProfilePage() {
   const [serveDate, setServeDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [markingAttendance, setMarkingAttendance] = useState(false);
   const [attendanceSuccess, setAttendanceSuccess] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
 
   useEffect(() => {
     async function loadData() {
@@ -114,6 +117,16 @@ export default function CustomerProfilePage() {
         const records = [...pRecords, ...sRecords].sort((a, b) => a.createdAt - b.createdAt); // oldest first
         
         setLedger(records);
+
+        // Fetch Batches
+        const targetBranchId = branchId || (user as any)?.clubId || 'default-branch';
+        if (targetBranchId) {
+          const batchesSnap = await getDocs(query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId), where('isActive', '==', true)));
+          const bData = batchesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          bData.sort((a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0));
+          setBatches(bData);
+          if (bData.length > 0) setSelectedBatchId(bData[0].id);
+        }
 
         // 5. Fetch all customers for family name mapping
         const allCusts = await CustomerService.getActiveCustomers(branchId || 'default-branch');
@@ -302,12 +315,15 @@ export default function CustomerProfilePage() {
       
       const notesStr = customer?.isTrial ? `Marked ${serveCount} attendance.` : `Served ${serveCount} shakes.`;
 
+      const selectedBatch = batches.find(b => b.id === selectedBatchId);
       const newConsumptionId = await LedgerService.addConsumption({
         shakesDeducted: serveCount,
         branchId: bId,
         createdBy: user.uid,
         createdAt: serveDateObj.getTime(),
-        notes: notesStr
+        notes: notesStr,
+        batchId: selectedBatch?.id || null,
+        batchName: selectedBatch?.name || null
       }, customerId);
       
       const newShakeEntry = {
@@ -665,6 +681,7 @@ export default function CustomerProfilePage() {
                       {customer?.isTrial && <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-[10px] h-4 px-1 py-0">Trial</Badge>}
                     </span>
                     <span className="text-xs text-primary font-medium block mt-1">Consumed By: {consumerName}</span>
+                    {sLog.batchName && <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium block">Batch: {sLog.batchName}</span>}
                     <span className="text-xs text-muted-foreground font-medium block">Marked By: {markedByName}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -815,6 +832,22 @@ export default function CustomerProfilePage() {
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
+                  </div>
+
+                  <div className="w-full mb-6">
+                    <p className="text-sm font-medium mb-2 text-center">Select Batch</p>
+                    <Select value={selectedBatchId} onValueChange={(val) => setSelectedBatchId(val || '')}>
+                      <SelectTrigger className="w-full text-base sm:text-sm">
+                        <SelectValue placeholder={batches.length > 0 ? "Select Batch" : "No active batches"}>
+                          {batches.find(b => b.id === selectedBatchId)?.name || 'Select Batch'}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent alignItemWithTrigger={false}>
+                        {batches.map(b => (
+                          <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="w-full mb-6">

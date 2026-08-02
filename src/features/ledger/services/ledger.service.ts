@@ -71,6 +71,8 @@ export class LedgerService {
       customerId: chargeToCustomerId,
       consumedBy: consumedByName,
       juniorPartnerId: consumer?.juniorPartnerId || null,
+      batchId: data.batchId || null,
+      batchName: data.batchName || null,
       createdAt: data.createdAt || Date.now(),
       isArchived: false,
     }));
@@ -81,7 +83,9 @@ export class LedgerService {
         consumer.juniorPartnerId,
         data.shakesDeducted,
         chargeToCustomerId,
-        data.createdBy
+        data.createdBy,
+        undefined,
+        data.createdAt || Date.now()
       );
     }
     
@@ -194,6 +198,43 @@ export class LedgerService {
     }
 
     return balances;
+  }
+
+  static async hasTransactions(customerId: string): Promise<boolean> {
+    const q = query(
+      COLLECTIONS.PAYMENT_LEDGER,
+      where('customerId', '==', customerId)
+    );
+    const snap = await getDocs(q);
+    return !snap.empty;
+  }
+
+  static async updatePastUnassignedLedgerEntries(customerId: string, newBranchId: string, newJuniorPartnerId: string): Promise<void> {
+    const q = query(
+      COLLECTIONS.PAYMENT_LEDGER,
+      where('customerId', '==', customerId)
+    );
+    const snap = await getDocs(q);
+    
+    for (const document of snap.docs) {
+      const data = document.data() as PaymentLedgerEntry;
+      let needsUpdate = false;
+      const updates: Partial<PaymentLedgerEntry> = {};
+
+      if (!data.branchId || data.branchId === 'unassigned') {
+        updates.branchId = newBranchId;
+        needsUpdate = true;
+      }
+      
+      if (!data.juniorPartnerId || data.juniorPartnerId === 'unassigned') {
+        updates.juniorPartnerId = newJuniorPartnerId;
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
+        await updateDoc(doc(COLLECTIONS.PAYMENT_LEDGER, document.id), updates);
+      }
+    }
   }
 
   static async getCustomerBalance(requestedCustomerId: string): Promise<CustomerMembershipStatus> {
@@ -393,7 +434,8 @@ export class LedgerService {
         data.juniorPartnerId,
         data.shakesDeducted,
         voidedBy,
-        'Refund for voided consumption'
+        'Refund for voided consumption',
+        data.createdAt
       );
     }
   }
@@ -471,7 +513,8 @@ export class LedgerService {
         data.shakesDeducted,
         data.customerId,
         revertedBy,
-        `Re-deduction for reverted void consumption: ${consumptionId}`
+        `Re-deduction for reverted void consumption: ${consumptionId}`,
+        data.createdAt
       );
     }
   }

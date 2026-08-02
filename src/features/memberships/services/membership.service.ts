@@ -61,6 +61,8 @@ export class MembershipService {
     const finalAmountPaid = amountPaid !== undefined ? amountPaid : plan.price;
     const remainingBalance = plan.price - finalAmountPaid;
 
+    const customer = await CustomerService.getCustomer(customerId);
+
     // 2. Add to payment ledger
     const ledgerEntry = {
       customerId,
@@ -73,6 +75,7 @@ export class MembershipService {
       validityDays: plan.validityDays,
       planName: plan.name,
       branchId,
+      juniorPartnerId: customer?.juniorPartnerId,
       createdBy,
       notes: `Membership Assigned: ${plan.name}` + (remainingBalance > 0 ? ` (Partial Payment. Balance: ${remainingBalance})` : ''),
     };
@@ -80,7 +83,6 @@ export class MembershipService {
     const paymentId = await LedgerService.addPayment(ledgerEntry);
     
     // 3. Remove trial flag if they are becoming a member and it's not a trial plan
-    const customer = await CustomerService.getCustomer(customerId);
     if (customer?.isTrial && !plan.isTrialPlan) {
       await CustomerService.updateCustomer(customerId, { 
         isTrial: false,

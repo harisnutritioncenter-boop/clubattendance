@@ -50,6 +50,7 @@ function AnalyticsPageContent() {
   const [clubs, setClubs] = useState<Record<string, string>>({});
   const [partners, setPartners] = useState<Record<string, string>>({});
   const [customers, setCustomers] = useState<Record<string, {name: string, assignedTo: string, branchId: string}>>({});
+  const [clubViewMode, setClubViewMode] = useState<'partner' | 'customer'>('partner');
 
   useEffect(() => {
     if (role) {
@@ -213,34 +214,56 @@ function AnalyticsPageContent() {
   // --- Drill Down Rendering Logic ---
   
   const renderClubLevel = (dayConsumptions: ShakeLedgerEntry[]) => {
-    // Aggregate by club
-    const clubTotals: Record<string, number> = {};
+    // Aggregate by club and keep track of batches
+    const clubTotals: Record<string, { total: number, batches: Record<string, number> }> = {};
     dayConsumptions.forEach(c => {
       const bId = c.branchId || 'unknown';
-      clubTotals[bId] = (clubTotals[bId] || 0) + (c.shakesDeducted || 1);
+      if (!clubTotals[bId]) clubTotals[bId] = { total: 0, batches: {} };
+      
+      const shakes = c.shakesDeducted || 1;
+      clubTotals[bId].total += shakes;
+      
+      const batchName = c.batchName || 'No Batch';
+      clubTotals[bId].batches[batchName] = (clubTotals[bId].batches[batchName] || 0) + shakes;
     });
 
-    const sortedClubs = Object.entries(clubTotals).sort((a, b) => b[1] - a[1]);
+    const sortedClubs = Object.entries(clubTotals).sort((a, b) => b[1].total - a[1].total);
 
     return (
       <div className="space-y-3 mt-6 animate-in slide-in-from-right-4 duration-300">
         <h2 className="text-xl font-bold mb-4 text-foreground">Clubs Overview</h2>
-        {sortedClubs.map(([bId, total], index) => (
+        {sortedClubs.map(([bId, data], index) => (
             <div 
               key={bId} 
               onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${bId}`)}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4"
+              className="flex items-center justify-between p-3 sm:p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-2 sm:gap-4"
             >
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                <div className="p-3 bg-primary/10 rounded-lg text-primary shrink-0">
-                  <Building className="h-6 w-6" />
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                <span className="font-bold text-muted-foreground w-4 sm:w-5 text-right shrink-0 text-sm sm:text-base">{index + 1}.</span>
+                <div className="p-2.5 bg-primary/10 rounded-lg text-primary shrink-0 hidden sm:block">
+                  <Building className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <div className="font-semibold text-lg text-foreground">{clubs[bId] || 'Unknown Club'}</div>
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <span className="font-semibold text-base sm:text-lg text-foreground truncate leading-tight">{clubs[bId] || 'Unknown Club'}</span>
+                  {Object.keys(data.batches).length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {Object.entries(data.batches)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([batchName, count]) => (
+                          <Badge key={batchName} variant="outline" className="text-[10px] sm:text-xs font-medium text-muted-foreground bg-muted/30 px-1.5 py-0 whitespace-nowrap">
+                            {batchName}: {count}
+                          </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-auto shrink-0">
-                <Badge variant="secondary" className="text-base px-3 py-1 bg-primary/5">{total} Shakes</Badge>
-                <ChevronRightIcon className="h-5 w-5 text-muted-foreground hidden sm:block" />
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant="secondary" className="text-sm sm:text-base px-2 py-1 bg-primary/5 whitespace-nowrap">
+                  {data.total} <span className="hidden sm:inline ml-1">Attendances</span>
+                </Badge>
+                <ChevronRightIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
               </div>
             </div>
         ))}
@@ -261,45 +284,113 @@ function AnalyticsPageContent() {
 
     const sortedPartners = Object.entries(partnerTotals).sort((a, b) => b[1] - a[1]);
 
+    // Group by Batch for the "customer" view mode
+    const batchesMap: Record<string, ShakeLedgerEntry[]> = {};
+    clubConsumptions.forEach(c => {
+      const batchName = c.batchName || 'No Batch';
+      if (!batchesMap[batchName]) batchesMap[batchName] = [];
+      batchesMap[batchName].push(c);
+    });
+    const sortedBatches = Object.keys(batchesMap).sort();
+
     return (
-      <div className="space-y-3 mt-6 animate-in slide-in-from-right-4 duration-300">
-        <h2 className="text-xl font-bold mb-4 text-foreground">Partners Overview {role === 'super_admin' && <span className="text-muted-foreground font-normal text-sm ml-2">({clubs[selectedClubId || ''] || 'Unknown Club'})</span>}</h2>
-        {sortedPartners.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No attendances found for this club.</div>
-        ) : (
-          sortedPartners.map(([pId, total], index) => (
-            <div 
-              key={pId} 
-              onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${selectedClubId}&partnerId=${pId}`)}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-4"
+      <div className="space-y-6 mt-6 animate-in slide-in-from-right-4 duration-300">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <h2 className="text-xl font-bold text-foreground">
+            Club Overview {role === 'super_admin' && <span className="text-muted-foreground font-normal text-sm ml-2">({clubs[selectedClubId || ''] || 'Unknown Club'})</span>}
+          </h2>
+          
+          <div className="flex bg-muted/50 p-1 rounded-lg border shadow-sm">
+            <button 
+              onClick={() => setClubViewMode('partner')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${clubViewMode === 'partner' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                <div className="p-3 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
-                  <Users className="h-6 w-6" />
+              By Partner
+            </button>
+            <button 
+              onClick={() => setClubViewMode('customer')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${clubViewMode === 'customer' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              By Customer
+            </button>
+          </div>
+        </div>
+
+        {clubViewMode === 'partner' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {sortedPartners.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No attendances found for this club.</div>
+            ) : (
+              sortedPartners.map(([pId, total], index) => (
+                <div 
+                  key={pId} 
+                  onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${selectedClubId}&partnerId=${pId}`)}
+                  className="flex flex-col justify-between p-3.5 sm:p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-3"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="font-bold text-muted-foreground w-4 shrink-0 mt-0.5 text-sm sm:text-base">{index + 1}.</span>
+                    <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      {pId === 'unassigned' ? (
+                        <span className="font-semibold text-base sm:text-lg text-foreground line-clamp-2 leading-tight">Unassigned / Admin</span>
+                      ) : partners[pId] ? (
+                        <Link 
+                          href={`/partners/${pId}`} 
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-semibold text-base sm:text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10 line-clamp-2 leading-tight"
+                        >
+                          {partners[pId]}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-base sm:text-lg text-muted-foreground line-clamp-2 leading-tight">Unknown Partner</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end flex-wrap gap-2 shrink-0 mt-1">
+                    <Badge variant="secondary" className="text-sm sm:text-base px-2 py-0.5 bg-primary/5 whitespace-nowrap">{total} Shakes</Badge>
+                    <ChevronRightIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-primary shrink-0" />
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  {pId === 'unassigned' ? (
-                    <span className="font-semibold text-lg text-foreground">Unassigned / Admin</span>
-                  ) : partners[pId] ? (
-                    <Link 
-                      href={`/partners/${pId}`} 
-                      onClick={(e) => e.stopPropagation()}
-                      className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10"
-                    >
-                      {partners[pId]}
-                    </Link>
-                  ) : (
-                    <span className="font-semibold text-lg text-muted-foreground">Unknown Partner</span>
-                  )}
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {sortedBatches.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No customer records found.</div>
+            ) : (
+              sortedBatches.map(batchName => (
+                <div key={batchName} className="space-y-3 bg-card p-4 rounded-xl border shadow-sm">
+                  <h3 className="font-bold text-lg text-primary border-b pb-2 mb-3">{batchName}</h3>
+                  {batchesMap[batchName].map((c, index) => (
+                    <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-transparent hover:border-border transition-colors">
+                      <div className="flex items-center gap-4">
+                        <span className="font-medium text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
+                        <div className="flex flex-col">
+                          {customers[c.customerId] ? (
+                            <Link href={`/customers/${c.customerId}`} className="font-semibold text-foreground hover:text-primary hover:underline">
+                              {c.consumedBy || customers[c.customerId]?.name}
+                            </Link>
+                          ) : (
+                            <span className="font-semibold text-foreground">{c.consumedBy || 'Unknown'}</span>
+                          )}
+                          <span className="text-xs text-muted-foreground mt-0.5">
+                            {new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {customers[c.customerId]?.assignedTo && (
+                                <span className="ml-2 pl-2 border-l">Partner: {partners[customers[c.customerId].assignedTo] || 'Unknown'}</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="shrink-0">{c.shakesDeducted || 1} {c.shakesDeducted === 1 ? 'Shake' : 'Shakes'}</Badge>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <div className="flex items-center gap-3 sm:gap-4 self-end sm:self-auto shrink-0">
-                <Badge variant="secondary" className="text-base px-3 py-1 bg-primary/5">{total} Shakes</Badge>
-                <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
-              </div>
-            </div>
-          ))
+              ))
+            )}
+          </div>
         )}
       </div>
     );
@@ -314,36 +405,45 @@ function AnalyticsPageContent() {
     });
 
     return (
-      <div className="space-y-3 mt-6 animate-in slide-in-from-right-4 duration-300">
+      <div className="mt-6 animate-in slide-in-from-right-4 duration-300">
         <h2 className="text-xl font-bold mb-4 text-foreground">Customer Records {role !== 'junior_partner' && <span className="text-muted-foreground font-normal text-sm ml-2">({partners[selectedPartnerId || ''] || 'Unassigned'})</span>}</h2>
-        {partnerConsumptions.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No customer records found.</div>
-        ) : (
-          partnerConsumptions.map((c, index) => (
-            <div key={c.id} className="flex items-center justify-between p-4 rounded-xl border bg-card shadow-sm">
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                <div className="flex flex-col">
-                  {customers[c.customerId] ? (
-                    <Link href={`/customers/${c.customerId}`} className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground">
-                      {c.consumedBy || customers[c.customerId]?.name}
-                    </Link>
-                  ) : (
-                  <span className="font-semibold text-lg text-muted-foreground">
-                    {c.consumedBy || 'Unknown Customer'}
-                  </span>
-                )}
-                  <div className="text-sm text-muted-foreground mt-1 font-medium">
-                    Marked at {formatDateTime(c.createdAt).split(' ')[1] || 'Unknown Time'}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {partnerConsumptions.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No customer records found.</div>
+          ) : (
+            partnerConsumptions.map((c, index) => (
+              <div key={c.id} className="flex flex-col justify-between p-3.5 sm:p-4 rounded-xl border bg-card shadow-sm gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="font-bold text-muted-foreground w-4 shrink-0 mt-0.5 text-sm sm:text-base">{index + 1}.</span>
+                  <div className="flex flex-col min-w-0">
+                    {customers[c.customerId] ? (
+                      <Link href={`/customers/${c.customerId}`} className="font-semibold text-base sm:text-lg hover:text-primary transition-colors hover:underline text-foreground line-clamp-2 leading-tight">
+                        {c.consumedBy || customers[c.customerId]?.name}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold text-base sm:text-lg text-muted-foreground line-clamp-2 leading-tight">
+                        {c.consumedBy || 'Unknown Customer'}
+                      </span>
+                    )}
+                    <div className="text-sm text-muted-foreground mt-1 font-medium flex items-center flex-wrap gap-2">
+                      <span>Marked at {formatDateTime(c.createdAt).split(' ')[1] || 'Unknown Time'}</span>
+                      {c.batchName && (
+                        <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground bg-muted/30 px-1.5 py-0 whitespace-nowrap">
+                          {c.batchName}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
+                <div className="flex items-center justify-end gap-2 shrink-0 mt-1">
+                  <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20 px-3 py-0.5 text-sm sm:text-base">
+                    +{c.shakesDeducted || 1}
+                  </Badge>
+                </div>
               </div>
-              <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20 px-4 py-1.5 text-base">
-                +{c.shakesDeducted || 1}
-              </Badge>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
     );
   };

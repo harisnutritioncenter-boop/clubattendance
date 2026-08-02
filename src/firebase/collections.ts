@@ -23,4 +23,5 @@ export const COLLECTIONS = {
   SETTINGS: createCollection('settings'),
   PARTNER_INVENTORY_LEDGER: createCollection('partnerInventoryLedger'),
   ACTIVITY_LOGS: createCollection('activityLogs'),
+  BATCHES: createCollection('batches'),
 } as const;

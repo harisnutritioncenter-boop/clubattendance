@@ -51,7 +51,8 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
   const { user, role } = useAuthStore();
   const { activeBranchId } = useBranchStore();
   const [error, setError] = useState<string | null>(null);
-  const [juniorPartners, setJuniorPartners] = useState<{value: string, label: string}[]>([]);
+  const [allJuniorPartners, setAllJuniorPartners] = useState<{id: string, name: string, branchId: string}[]>([]);
+  const [filteredJuniorPartners, setFilteredJuniorPartners] = useState<{value: string, label: string}[]>([]);
   const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
   const [branches, setBranches] = useState<{id: string, name: string}[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
@@ -61,7 +62,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
       try {
         const [usersSnap, customersList, plansSnap] = await Promise.all([
           getDocs(COLLECTIONS.USERS),
-          CustomerService.getActiveCustomers(activeBranchId),
+          CustomerService.getActiveCustomers(null),
           getDocs(COLLECTIONS.MEMBERSHIP_PLANS)
         ]);
         
@@ -72,14 +73,14 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
           setBranches(branchesSnap.docs.map(d => ({ id: d.id, name: d.data().name })));
         }
 
-        const jps: {value: string, label: string}[] = [];
+        const jps: {id: string, name: string, branchId: string}[] = [];
         const refs: string[] = [];
 
         usersSnap.docs.forEach(d => {
           const data = d.data();
           if (data.role === 'junior_partner' || data.role === 'club_owner') {
             const label = data.name || data.email || d.id;
-            jps.push({ value: d.id, label });
+            jps.push({ id: d.id, name: label, branchId: data.clubId || data.branchId || '' });
             refs.push(label);
           }
         });
@@ -88,14 +89,34 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
           refs.push(c.name);
         });
 
-        setJuniorPartners(jps);
+        setAllJuniorPartners(jps);
         setReferenceOptions(refs);
       } catch (e) {
         console.error('Failed to fetch form options', e);
       }
     };
     fetchData();
-  }, [activeBranchId]);
+  }, [role]);
+
+  useEffect(() => {
+    let filtered = allJuniorPartners;
+    
+    if (role !== 'super_admin') {
+      if (activeBranchId) {
+        filtered = filtered.filter(jp => jp.branchId === activeBranchId);
+      } else {
+        filtered = [];
+      }
+    }
+
+    setFilteredJuniorPartners(filtered.map(jp => {
+      const branchName = branches.find(b => b.id === jp.branchId)?.name || 'Unknown Club';
+      return { 
+        value: jp.id, 
+        label: role === 'super_admin' ? `${jp.name} (${branchName})` : jp.name 
+      };
+    }));
+  }, [allJuniorPartners, activeBranchId, role, branches]);
 
   const form = useForm<OfflineMigrationFormValues>({
     resolver: zodResolver(offlineMigrationSchema) as any,
@@ -133,6 +154,12 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
   
   const watchBirthDate = form.watch('birthDate');
   const computedAge = watchBirthDate ? calculateAge(new Date(watchBirthDate).getTime()) : null;
+
+  useEffect(() => {
+    if (role !== 'super_admin' && activeBranchId && !form.getValues('branchId')) {
+      form.setValue('branchId', activeBranchId);
+    }
+  }, [role, activeBranchId, form]);
 
   const onSubmit = async (values: OfflineMigrationFormValues) => {
     try {
@@ -175,6 +202,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
             planName: 'Offline Migration Plan',
             paymentMethod: (values.paymentMethod as any) || 'Cash',
             branchId,
+            juniorPartnerId: values.juniorPartnerId,
             createdBy,
             remainingBalance: remaining > 0 ? remaining : 0,
             createdAt: pDate.getTime(),
@@ -194,6 +222,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
             planName: plan.name,
             paymentMethod: (values.paymentMethod as any) || 'Cash',
             branchId,
+            juniorPartnerId: values.juniorPartnerId,
             createdBy,
             remainingBalance: remaining > 0 ? remaining : 0,
             createdAt: pDate.getTime(),
@@ -279,9 +308,17 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
               <FormItem>
                 <FormLabel>Junior Partner</FormLabel>
                 <Combobox 
-                  options={juniorPartners} 
+                  options={filteredJuniorPartners} 
                   value={field.value || ''} 
-                  onChange={field.onChange} 
+                  onChange={(val) => {
+                    field.onChange(val);
+                    if (val && role === 'super_admin') {
+                      const jp = allJuniorPartners.find(p => p.id === val);
+                      if (jp && jp.branchId) {
+                        form.setValue('branchId', jp.branchId, { shouldValidate: true });
+                      }
+                    }
+                  }} 
                   placeholder="Search Partner"
                   emptyText="No partner found"
                   onAddNew={() => window.open('/partners', '_blank')}
@@ -297,9 +334,9 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Club (Branch)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={!!form.watch('juniorPartnerId')}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="disabled:opacity-50">
                         <SelectValue placeholder="Select a club">
                           {field.value ? branches.find(b => b.id === field.value)?.name || "Unknown Club" : "Select a club"}
                         </SelectValue>

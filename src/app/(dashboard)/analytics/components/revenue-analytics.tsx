@@ -7,6 +7,7 @@ import { Customer } from '@/features/customers/types/customer.types';
 import { PaymentLedgerEntry } from '@/features/ledger/types/ledger.types';
 import { Building, Users, ChevronRightIcon, ChevronLeftIcon, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
 interface RevenueAnalyticsProps {
@@ -95,6 +96,29 @@ export function RevenueAnalytics({
     }
   };
 
+  const getCustomerMap = () => {
+    const map: Record<string, Customer> = {};
+    customers.forEach(c => {
+      map[c.id] = c;
+    });
+    return map;
+  };
+
+  const getEffectiveBranchId = (p: PaymentLedgerEntry, customer?: Customer) => {
+    if (p.branchId && p.branchId !== 'unassigned' && clubs[p.branchId]) return p.branchId;
+    if (customer?.branchId && customer.branchId !== 'unassigned' && clubs[customer.branchId]) return customer.branchId;
+    return 'unknown';
+  };
+
+  const getEffectivePartnerId = (p: PaymentLedgerEntry, customer?: Customer) => {
+    if (p.juniorPartnerId && p.juniorPartnerId !== 'unassigned') return p.juniorPartnerId;
+    // For older records: if createdBy is a known partner, assume they did it.
+    if (p.createdBy && partners[p.createdBy]) return p.createdBy;
+    // Fallback to customer's current partner for old admin-created records
+    if (customer?.juniorPartnerId && customer.juniorPartnerId !== 'unassigned' && partners[customer.juniorPartnerId]) return customer.juniorPartnerId;
+    return 'unassigned';
+  };
+
   const getCustomerPartnerMap = () => {
     const map: Record<string, string> = {};
     customers.forEach(c => {
@@ -104,10 +128,12 @@ export function RevenueAnalytics({
   };
 
   const renderClubLevel = () => {
+    const customerMap = getCustomerMap();
     const clubTotals: Record<string, { totalRevenue: number, count: number }> = {};
     
     payments.forEach(p => {
-      const bId = p.branchId || 'unknown';
+      const customer = customerMap[p.customerId];
+      const bId = getEffectiveBranchId(p, customer);
       if (!clubTotals[bId]) clubTotals[bId] = { totalRevenue: 0, count: 0 };
       clubTotals[bId].totalRevenue += p.amount;
       clubTotals[bId].count += 1;
@@ -129,26 +155,27 @@ export function RevenueAnalytics({
         {sortedClubs.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No revenue recorded this month.</div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sortedClubs.map(([bId, stats], index) => (
               <div 
                 key={bId} 
                 onClick={() => setSelectedClubId(bId)}
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4 group"
+                className="flex flex-col p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4 group"
               >
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
                   <div className="p-3 bg-primary/10 rounded-lg text-primary shrink-0">
                     <Building className="h-6 w-6" />
                   </div>
-                  <div className="font-semibold text-lg text-foreground">{clubs[bId] || 'Unknown Club'}</div>
+                  <div className="flex flex-col">
+                    <div className="font-semibold text-lg text-foreground line-clamp-1">{clubs[bId] || 'Unknown Club'}</div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 self-end sm:self-auto shrink-0">
-                  <div className="flex flex-col text-right mr-2">
+                <div className="flex items-center justify-between mt-auto pt-4 border-t">
+                  <div className="flex flex-col">
                     <span className="text-[10px] sm:text-xs text-muted-foreground uppercase">{stats.count} Transactions</span>
                     <span className="font-bold text-lg text-green-600 dark:text-green-400">₹{stats.totalRevenue.toLocaleString('en-IN')}</span>
                   </div>
-                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
+                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
                 </div>
               </div>
             ))}
@@ -161,12 +188,15 @@ export function RevenueAnalytics({
   const renderPartnerLevel = () => {
     if (!selectedClubId) return null;
 
-    const customerPartnerMap = getCustomerPartnerMap();
+    const customerMap = getCustomerMap();
     const partnerTotals: Record<string, { totalRevenue: number, count: number }> = {};
     
     payments.forEach(p => {
-      if (p.branchId === selectedClubId) {
-        const pId = customerPartnerMap[p.customerId] || p.createdBy || 'unassigned';
+      const customer = customerMap[p.customerId];
+      const bId = getEffectiveBranchId(p, customer);
+      
+      if (bId === selectedClubId) {
+        const pId = getEffectivePartnerId(p, customer);
         if (!partnerTotals[pId]) partnerTotals[pId] = { totalRevenue: 0, count: 0 };
         partnerTotals[pId].totalRevenue += p.amount;
         partnerTotals[pId].count += 1;
@@ -199,40 +229,39 @@ export function RevenueAnalytics({
         {sortedPartners.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No revenue recorded this month.</div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sortedPartners.map(([pId, stats], index) => (
               <div 
                 key={pId} 
                 onClick={() => setSelectedPartnerId(pId)}
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-4"
+                className="flex flex-col p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4 group"
               >
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
                   <div className="p-3 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
                     <Users className="h-6 w-6" />
                   </div>
                   <div className="flex flex-col">
                     {pId === 'unassigned' ? (
-                      <span className="font-semibold text-lg text-foreground">Unassigned / Admin</span>
+                      <span className="font-semibold text-lg text-foreground line-clamp-1">Unassigned / Admin</span>
                     ) : partners[pId] ? (
                       <Link 
                         href={`/partners/${pId}`} 
                         onClick={(e) => e.stopPropagation()}
-                        className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10"
+                        className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10 line-clamp-1"
                       >
                         {partners[pId]}
                       </Link>
                     ) : (
-                      <span className="font-semibold text-lg text-muted-foreground">Unknown Partner</span>
+                      <span className="font-semibold text-lg text-muted-foreground line-clamp-1">Unknown Partner</span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-4 self-end sm:self-auto shrink-0">
-                  <div className="flex flex-col text-right mr-2">
+                <div className="flex items-center justify-between mt-auto pt-4 border-t">
+                  <div className="flex flex-col">
                     <span className="text-[10px] sm:text-xs text-muted-foreground uppercase">{stats.count} Transactions</span>
                     <span className="font-bold text-lg text-green-600 dark:text-green-400">₹{stats.totalRevenue.toLocaleString('en-IN')}</span>
                   </div>
-                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
+                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
                 </div>
               </div>
             ))}
@@ -245,20 +274,24 @@ export function RevenueAnalytics({
   const renderCustomerLevel = () => {
     if (!selectedClubId || !selectedPartnerId) return null;
 
-    const customerPartnerMap = getCustomerPartnerMap();
-    const customerTotals: Record<string, { totalRevenue: number, count: number, name: string, mobile: string }> = {};
+    const customerMap = getCustomerMap();
+    const customerTotals: Record<string, { totalRevenue: number, count: number, name: string, mobile: string, missingClub: boolean, missingPartner: boolean }> = {};
     
     payments.forEach(p => {
-      const pId = customerPartnerMap[p.customerId] || p.createdBy || 'unassigned';
-      if (p.branchId === selectedClubId && pId === selectedPartnerId) {
+      const customer = customerMap[p.customerId];
+      const bId = getEffectiveBranchId(p, customer);
+      const pId = getEffectivePartnerId(p, customer);
+      
+      if (bId === selectedClubId && pId === selectedPartnerId) {
         const cId = p.customerId;
         if (!customerTotals[cId]) {
-          const cData = customers.find(c => c.id === cId);
           customerTotals[cId] = { 
             totalRevenue: 0, 
             count: 0, 
-            name: cData ? cData.name : 'Unknown Customer',
-            mobile: cData ? cData.mobile : ''
+            name: customer ? customer.name : 'Unknown Customer',
+            mobile: customer ? customer.mobile : '',
+            missingClub: customer ? (!customer.branchId || customer.branchId === 'unassigned') : true,
+            missingPartner: customer ? (!customer.juniorPartnerId || customer.juniorPartnerId === 'unassigned') : true
           };
         }
         customerTotals[cId].totalRevenue += p.amount;
@@ -296,31 +329,34 @@ export function RevenueAnalytics({
         {sortedCustomers.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No revenue recorded for these customers.</div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sortedCustomers.map(([cId, stats], index) => (
               <div 
                 key={cId} 
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 transition-all shadow-sm gap-4 group"
+                className="flex flex-col p-4 rounded-xl border bg-card hover:border-primary/50 transition-all shadow-sm gap-4 group"
               >
-                <div className="flex items-center gap-4">
-                  <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
+                <div className="flex items-start gap-4">
                   <div className="p-3 bg-emerald-500/10 rounded-lg text-emerald-600 dark:text-emerald-400 shrink-0">
                     <User className="h-6 w-6" />
                   </div>
-                  <div className="flex flex-col">
-                    {cId !== 'unknown' ? (
-                      <Link href={`/customers/${cId}`} className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground">
-                        {stats.name}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold text-lg text-muted-foreground">{stats.name}</span>
-                    )}
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {cId !== 'unknown' ? (
+                        <Link href={`/customers/${cId}`} className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground line-clamp-1 break-all">
+                          {stats.name}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-lg text-muted-foreground line-clamp-1">{stats.name}</span>
+                      )}
+                      {stats.missingClub && <Badge variant="destructive" className="whitespace-nowrap">Not assigned club</Badge>}
+                      {stats.missingPartner && <Badge variant="destructive" className="whitespace-nowrap">Not assigned junior partner</Badge>}
+                    </div>
                     <div className="text-sm text-muted-foreground">{stats.mobile}</div>
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-4 self-end sm:self-auto shrink-0">
-                  <div className="flex flex-col text-right mr-2">
+                <div className="flex items-center justify-between mt-auto pt-4 border-t">
+                  <div className="flex flex-col">
                     <span className="text-[10px] sm:text-xs text-muted-foreground uppercase">{stats.count} Transactions</span>
                     <span className="font-bold text-lg text-green-600 dark:text-green-400">₹{stats.totalRevenue.toLocaleString('en-IN')}</span>
                   </div>

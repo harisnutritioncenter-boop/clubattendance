@@ -41,6 +41,7 @@ export function TrialsAnalytics({
   // Drill down states
   const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  const [clubViewMode, setClubViewMode] = useState<'partner' | 'customer'>('partner');
 
   const isDrilledDown = selectedClubId !== null || selectedPartnerId !== null;
 
@@ -110,6 +111,37 @@ export function TrialsAnalytics({
 
   const monthName = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
 
+  const renderTable = (list: Customer[], title: string, isConverted: boolean) => (
+    <div className="bg-card rounded-xl border overflow-hidden shadow-sm h-fit">
+      <div className={`p-4 font-bold text-lg border-b ${isConverted ? 'bg-green-500/10 text-green-700' : 'bg-red-500/10 text-red-700'}`}>
+        {title} ({list.length})
+      </div>
+      {list.length === 0 ? (
+        <div className="p-6 text-center text-muted-foreground text-sm">No customers found.</div>
+      ) : (
+        <div className="divide-y">
+          {list.map((c, index) => (
+            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/30 transition-colors gap-3">
+              <div className="flex items-center gap-4">
+                <span className="font-bold text-muted-foreground w-4 text-right shrink-0">{index + 1}.</span>
+                <div className="flex flex-col">
+                  <Link href={`/customers/${c.id}`} className="font-semibold text-base hover:text-primary transition-colors hover:underline text-foreground">
+                    {c.name || 'Unknown'}
+                  </Link>
+                  <div className="text-xs text-muted-foreground mt-0.5">Created: {formatDateTime(c.createdAt).split(' ')[0]}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 self-start sm:self-auto ml-8 sm:ml-0">
+                <span className="text-sm text-muted-foreground">{c.mobile}</span>
+                <ContactActions mobile={c.mobile} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const renderClubLevel = () => {
     // Aggregate by club
     const clubTotals: Record<string, { total: number, notConverted: number }> = {};
@@ -143,10 +175,10 @@ export function TrialsAnalytics({
                 </div>
                 <div className="font-semibold text-lg text-foreground">{clubs[bId] || 'Unknown Club'}</div>
               </div>
-              <div className="flex items-center gap-2 sm:gap-4 self-end sm:self-auto">
+              <div className="flex items-center flex-wrap gap-2 sm:gap-4 self-end sm:self-auto justify-end">
                 <Badge variant="secondary" className="text-sm px-3 py-1 bg-primary/5">{stats.total} Total</Badge>
-                <Badge variant="secondary" className="text-sm px-3 py-1 bg-red-500/10 text-red-600">{stats.notConverted} Not Converted</Badge>
-                <ChevronRightIcon className="h-5 w-5 text-muted-foreground hidden sm:block" />
+                <Badge variant="secondary" className="text-sm px-3 py-1 bg-red-500/10 text-red-600 whitespace-nowrap">{stats.notConverted} Not Converted</Badge>
+                <ChevronRightIcon className="h-5 w-5 text-muted-foreground hidden sm:block shrink-0" />
               </div>
             </div>
           ))
@@ -172,51 +204,76 @@ export function TrialsAnalytics({
 
     return (
       <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-        <div className="flex items-center gap-4 mb-6">
-          {role === 'super_admin' && (
-            <Button variant="outline" size="icon" onClick={handleBack} className="shrink-0 rounded-full h-10 w-10">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          )}
-          <div className="flex flex-col">
-            <h2 className="text-xl font-bold text-foreground">Partners Overview</h2>
-            <span className="text-sm text-muted-foreground font-medium">{clubs[selectedClubId || ''] || 'Unknown Club'} • {monthName} {currentYear}</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-4">
+            {role === 'super_admin' && (
+              <Button variant="outline" size="icon" onClick={handleBack} className="shrink-0 rounded-full h-10 w-10">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <div className="flex flex-col">
+              <h2 className="text-xl font-bold text-foreground">Partners Overview</h2>
+              <span className="text-sm text-muted-foreground font-medium">{clubs[selectedClubId || ''] || 'Unknown Club'} • {monthName} {currentYear}</span>
+            </div>
+          </div>
+          <div className="flex bg-muted/50 p-1 rounded-lg border shadow-sm w-fit self-end sm:self-auto">
+            <button 
+              onClick={() => setClubViewMode('partner')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${clubViewMode === 'partner' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              By Partner
+            </button>
+            <button 
+              onClick={() => setClubViewMode('customer')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${clubViewMode === 'customer' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              By Customer
+            </button>
           </div>
         </div>
 
-        {sortedPartners.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No trials found for this club in this month.</div>
+        {clubViewMode === 'partner' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            {sortedPartners.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No trials found for this club in this month.</div>
+            ) : (
+              sortedPartners.map(([pId, stats], index) => (
+                <div 
+                  key={pId} 
+                  onClick={() => setSelectedPartnerId(pId)}
+                  className="flex flex-col justify-between p-3.5 sm:p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-3"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="font-bold text-muted-foreground w-4 shrink-0 mt-0.5 text-sm sm:text-base">{index + 1}.</span>
+                    <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      {pId === 'unassigned' ? (
+                        <span className="font-semibold text-base sm:text-lg text-foreground line-clamp-2 leading-tight">Unassigned / Admin</span>
+                      ) : partners[pId] ? (
+                        <Link href={`/partners/${pId}`} className="font-semibold text-base sm:text-lg hover:text-primary transition-colors hover:underline text-foreground line-clamp-2 leading-tight">
+                          {partners[pId]}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-base sm:text-lg text-muted-foreground line-clamp-2 leading-tight">Unknown Partner</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end flex-wrap gap-2 shrink-0 mt-1">
+                    <Badge variant="secondary" className="text-sm px-2 py-0.5 bg-primary/5">{stats.total} Total</Badge>
+                    <Badge variant="secondary" className="text-sm px-2 py-0.5 bg-red-500/10 text-red-600 whitespace-nowrap">{stats.notConverted} Not Converted</Badge>
+                    <ChevronRightIcon className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0" />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         ) : (
-          sortedPartners.map(([pId, stats], index) => (
-            <div 
-              key={pId} 
-              onClick={() => setSelectedPartnerId(pId)}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-4"
-            >
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                <div className="p-3 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400">
-                  <Users className="h-6 w-6" />
-                </div>
-                <div className="flex flex-col">
-                  {pId === 'unassigned' ? (
-                    <span className="font-semibold text-lg text-foreground">Unassigned / Admin</span>
-                  ) : partners[pId] ? (
-                    <Link href={`/partners/${pId}`} className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground">
-                      {partners[pId]}
-                    </Link>
-                  ) : (
-                    <span className="font-semibold text-lg text-muted-foreground">Unknown Partner</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-4 self-end sm:self-auto">
-                <Badge variant="secondary" className="text-sm px-3 py-1 bg-primary/5">{stats.total} Total</Badge>
-                <Badge variant="secondary" className="text-sm px-3 py-1 bg-red-500/10 text-red-600">{stats.notConverted} Not Converted</Badge>
-                <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
-              </div>
-            </div>
-          ))
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {renderTable(clubTrials.filter(c => c.isTrial), "Not Converted Trials", false)}
+            {renderTable(clubTrials.filter(c => !c.isTrial), "Converted Trials", true)}
+          </div>
         )}
       </div>
     );
@@ -232,37 +289,6 @@ export function TrialsAnalytics({
 
     const converted = partnerTrials.filter(c => !c.isTrial);
     const notConverted = partnerTrials.filter(c => c.isTrial);
-
-    const renderTable = (list: Customer[], title: string, isConverted: boolean) => (
-      <div className="bg-card rounded-xl border overflow-hidden shadow-sm h-fit">
-        <div className={`p-4 font-bold text-lg border-b ${isConverted ? 'bg-green-500/10 text-green-700' : 'bg-red-500/10 text-red-700'}`}>
-          {title} ({list.length})
-        </div>
-        {list.length === 0 ? (
-          <div className="p-6 text-center text-muted-foreground text-sm">No customers found.</div>
-        ) : (
-          <div className="divide-y">
-            {list.map((c, index) => (
-              <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/30 transition-colors gap-3">
-                <div className="flex items-center gap-4">
-                  <span className="font-bold text-muted-foreground w-4 text-right shrink-0">{index + 1}.</span>
-                  <div className="flex flex-col">
-                    <Link href={`/customers/${c.id}`} className="font-semibold text-base hover:text-primary transition-colors hover:underline text-foreground">
-                      {c.name || 'Unknown'}
-                    </Link>
-                    <div className="text-xs text-muted-foreground mt-0.5">Created: {formatDateTime(c.createdAt).split(' ')[0]}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 self-start sm:self-auto ml-8 sm:ml-0">
-                  <span className="text-sm text-muted-foreground">{c.mobile}</span>
-                  <ContactActions mobile={c.mobile} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
@@ -299,21 +325,26 @@ export function TrialsAnalytics({
 
   // View routing
   const viewLevel = selectedPartnerId ? 'customer' : (selectedClubId ? 'partner' : 'club');
+  const isTopLevel = (role === 'super_admin' && viewLevel === 'club') || 
+                     (role === 'club_owner' && viewLevel === 'partner') || 
+                     (role === 'junior_partner' && viewLevel === 'customer');
 
   return (
     <div className="w-full mt-4">
-      <div className="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-4 mb-6">
-        <div className="flex items-center justify-between bg-card p-1.5 rounded-2xl border shadow-sm self-stretch sm:self-auto sm:w-[320px]">
-          <Button variant="ghost" size="icon" onClick={onPrevMonth} disabled={loading} className="rounded-xl text-foreground shrink-0"><ChevronLeftIcon className="h-5 w-5" /></Button>
-          <div className="font-bold text-center flex flex-col items-center flex-1 px-2">
-            <span className="text-base sm:text-lg leading-tight text-foreground">{monthName} {currentYear}</span>
-            <span className="text-xs text-muted-foreground font-semibold tracking-wider">
-              {trials.length} TRIAL{trials.length !== 1 ? 'S' : ''} TOTAL
-            </span>
+      {isTopLevel && (
+        <div className="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-4 mb-6">
+          <div className="flex items-center justify-between bg-card p-1.5 rounded-2xl border shadow-sm self-stretch sm:self-auto sm:w-[320px]">
+            <Button variant="ghost" size="icon" onClick={onPrevMonth} disabled={loading} className="rounded-xl text-foreground shrink-0"><ChevronLeftIcon className="h-5 w-5" /></Button>
+            <div className="font-bold text-center flex flex-col items-center flex-1 px-2">
+              <span className="text-base sm:text-lg leading-tight text-foreground">{monthName} {currentYear}</span>
+              <span className="text-xs text-muted-foreground font-semibold tracking-wider">
+                {trials.length} TRIAL{trials.length !== 1 ? 'S' : ''} TOTAL
+              </span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onNextMonth} disabled={loading} className="rounded-xl text-foreground shrink-0"><ChevronRightIcon className="h-5 w-5" /></Button>
           </div>
-          <Button variant="ghost" size="icon" onClick={onNextMonth} disabled={loading} className="rounded-xl text-foreground shrink-0"><ChevronRightIcon className="h-5 w-5" /></Button>
         </div>
-      </div>
+      )}
 
       {viewLevel === 'club' && renderClubLevel()}
       {viewLevel === 'partner' && renderPartnerLevel()}

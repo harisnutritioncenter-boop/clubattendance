@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { getDocs, query, where } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase/collections';
 import Link from 'next/link';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 import { ManageShakesModal } from '@/features/partners/components/add-shakes-modal';
 
@@ -36,6 +37,8 @@ export default function ConsumptionPage() {
   // Serve State
   const [serveCount, setServeCount] = useState(1);
   const [serveDate, setServeDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
+  const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -62,6 +65,16 @@ export default function ConsumptionPage() {
       }
     });
     setPartners(pMap);
+
+    // Fetch Batches
+    const targetBranchId = branchId || (user as any)?.clubId || 'default-branch';
+    if (targetBranchId) {
+      const batchesSnap = await getDocs(query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId), where('isActive', '==', true)));
+      const bData = batchesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      bData.sort((a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0));
+      setBatches(bData);
+      if (bData.length > 0) setSelectedBatchId(bData[0].id);
+    }
   };
 
   useEffect(() => {
@@ -125,12 +138,15 @@ export default function ConsumptionPage() {
       serveDateObj.setHours(new Date().getHours()); // keep current time but specific day
       serveDateObj.setMinutes(new Date().getMinutes());
       
+      const selectedBatch = batches.find(b => b.id === selectedBatchId);
       await LedgerService.addConsumption({
         shakesDeducted: serveCount,
         branchId: bId,
         createdBy: user.uid,
         createdAt: serveDateObj.getTime(),
-        notes: `Served ${serveCount} shakes.`
+        notes: `Served ${serveCount} shakes.`,
+        batchId: selectedBatch?.id || null,
+        batchName: selectedBatch?.name || null
       }, selectedCustomerId);
       
       setBalance({
@@ -256,37 +272,55 @@ export default function ConsumptionPage() {
               />
             </div>
             
-            <div className="w-full md:w-48">
-              <CardDescription className="font-medium mb-2">Attendance Date</CardDescription>
-              <Popover>
-                <PopoverTrigger 
-                  render={
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !serveDate && "text-muted-foreground"
-                      )}
+            <div className="flex gap-3 w-full md:w-auto mt-3 md:mt-0">
+              <div className="flex-1 md:w-40 lg:w-48">
+                <CardDescription className="font-medium mb-2">Attendance Date</CardDescription>
+                <Popover>
+                  <PopoverTrigger 
+                    render={
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !serveDate && "text-muted-foreground"
+                        )}
+                      />
+                    }
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                    <span className="truncate">{serveDate ? formatDate(serveDate) : "Pick date"}</span>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={serveDate ? new Date(serveDate) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                          setServeDate(localDateStr);
+                        }
+                      }}
+                      disabled={(date) => date > new Date()}
                     />
-                  }
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {serveDate ? formatDate(serveDate) : <span>Pick a date</span>}
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={serveDate ? new Date(serveDate) : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        const localDateStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-                        setServeDate(localDateStr);
-                      }
-                    }}
-                    disabled={(date) => date > new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="flex-1 md:w-40 lg:w-48">
+                <CardDescription className="font-medium mb-2">Select Batch</CardDescription>
+                <Select value={selectedBatchId} onValueChange={(val) => setSelectedBatchId(val || '')}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={batches.length > 0 ? "Select Batch" : "No active batches"}>
+                      <span className="truncate">{batches.find(b => b.id === selectedBatchId)?.name || 'Select Batch'}</span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    {batches.map(b => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <div className="mt-2 text-xs text-muted-foreground">
@@ -376,8 +410,11 @@ export default function ConsumptionPage() {
                     </div>
                   </div>
 
+
+
                   <Button 
                     size="lg" 
+
                     className="w-full h-12 text-lg font-bold" 
                     onClick={handleServe}
                     disabled={loading}

@@ -1,5 +1,5 @@
 export type ActivityAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'REVERT' | 'ARCHIVE' | 'CONSUME' | 'PURCHASE' | 'COLLECT_DEBT' | 'ADD_SHAKES' | 'DEDUCT_SHAKES' | 'ADD_FAMILY_MEMBER' | 'REMOVE_FAMILY_MEMBER';
-export type EntityType = 'Customer' | 'Partner' | 'Consumption' | 'Payment' | 'Inventory' | 'Membership' | 'FamilyAccount' | 'Trial';
+export type EntityType = 'Customer' | 'Partner' | 'Consumption' | 'Payment' | 'Inventory' | 'Membership' | 'FamilyAccount' | 'Trial' | 'Batch';
 
 export interface ActivityLog {
   id: string;

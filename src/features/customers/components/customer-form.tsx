@@ -9,6 +9,8 @@ import { Customer } from '../types/customer.types';
 import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { Combobox } from '@/components/ui/combobox';
+import { LedgerService } from '@/features/ledger/services/ledger.service';
+import { TimedConfirmDialog } from '@/components/ui/timed-confirm-dialog';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -127,29 +129,37 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
     fetchData();
   }, [role]);
 
-  // Filter Junior Partners when Branch changes
+  // Filter Junior Partners
   useEffect(() => {
     let filtered = allJuniorPartners;
     
-    // Strict match on branch. If not a super_admin, we must enforce their active branch.
-    const branchToFilter = selectedBranchId || activeBranchId;
-    
-    if (branchToFilter) {
-      filtered = filtered.filter(jp => jp.branchId === branchToFilter); 
-    } else if (role !== 'super_admin') {
-      // If no branch is determined yet but they are not a super admin, show nothing to prevent leaks
-      filtered = [];
+    // Regular users (junior partners, club owners) only see their branch's JPs
+    if (role !== 'super_admin') {
+      if (activeBranchId) {
+        filtered = filtered.filter(jp => jp.branchId === activeBranchId);
+      } else {
+        filtered = [];
+      }
     }
 
-    setFilteredJuniorPartners(filtered.map(jp => ({ value: jp.id, label: jp.name })));
+    setFilteredJuniorPartners(filtered.map(jp => {
+      const branchName = branches.find(b => b.id === jp.branchId)?.name || 'Unknown Club';
+      return { 
+        value: jp.id, 
+        label: role === 'super_admin' ? `${jp.name} (${branchName})` : jp.name 
+      };
+    }));
     
     // Auto-select branch if not super admin
     if (role !== 'super_admin' && activeBranchId && !form.getValues('branchId')) {
       form.setValue('branchId', activeBranchId);
     }
-  }, [selectedBranchId, allJuniorPartners, activeBranchId, role, form]);
+  }, [allJuniorPartners, activeBranchId, role, form, branches]);
 
-  const onSubmit = async (values: CustomerFormValues) => {
+  const [showReassignDialog, setShowReassignDialog] = useState(false);
+  const [pendingValues, setPendingValues] = useState<CustomerFormValues | null>(null);
+
+  const executeSave = async (values: CustomerFormValues, isReassignment = false) => {
     try {
       setError(null);
       
@@ -178,6 +188,14 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
           createdBy,
           bId
         );
+        
+        if (isReassignment) {
+          await LedgerService.updatePastUnassignedLedgerEntries(
+            customer.id,
+            bId,
+            values.juniorPartnerId || 'unassigned'
+          );
+        }
       } else {
         const customerId = await CustomerService.createCustomer({
           name: values.name,
@@ -196,7 +214,6 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
           isTrial: isTrial || false,
         });
 
-        // Optional: Assign membership plan directly only on creation
         if (values.assignPlanId && values.assignPlanId !== 'none' && values.paymentMethod) {
           await MembershipService.assignMembership(
             customerId,
@@ -216,8 +233,30 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
     }
   };
 
+  const onSubmit = async (values: CustomerFormValues) => {
+    if (customer) {
+      const wasMissingClub = !customer.branchId || customer.branchId === 'unassigned';
+      const wasMissingPartner = !customer.juniorPartnerId || customer.juniorPartnerId === 'unassigned';
+      
+      const isAssigningClub = wasMissingClub && values.branchId && values.branchId !== 'unassigned';
+      const isAssigningPartner = wasMissingPartner && values.juniorPartnerId && values.juniorPartnerId !== 'unassigned';
+      
+      if (isAssigningClub || isAssigningPartner) {
+        const hasPastTx = await LedgerService.hasTransactions(customer.id);
+        if (hasPastTx) {
+          setPendingValues(values);
+          setShowReassignDialog(true);
+          return;
+        }
+      }
+    }
+    
+    await executeSave(values, false);
+  };
+
   return (
-    <Form {...form}>
+    <>
+      <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         
         {/* Core Info */}
@@ -353,9 +392,9 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Club (Branch)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!!form.watch('juniorPartnerId')}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="disabled:opacity-50">
                           <SelectValue placeholder="Select a club">
                             {field.value ? branches.find(b => b.id === field.value)?.name || "Unknown Club" : "Select a club"}
                           </SelectValue>
@@ -382,7 +421,15 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
                   <Combobox
                     options={filteredJuniorPartners}
                     value={field.value || ''}
-                    onChange={field.onChange}
+                    onChange={(val) => {
+                      field.onChange(val);
+                      if (val && role === 'super_admin') {
+                        const jp = allJuniorPartners.find(p => p.id === val);
+                        if (jp && jp.branchId) {
+                          form.setValue('branchId', jp.branchId, { shouldValidate: true });
+                        }
+                      }
+                    }}
                     placeholder="Select Junior Partner"
                     emptyText="No partner found"
                     onAddNew={() => window.open('/partners', '_blank')}
@@ -593,5 +640,19 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
         </div>
       </form>
     </Form>
+
+    <TimedConfirmDialog
+      open={showReassignDialog}
+      onOpenChange={setShowReassignDialog}
+      title="Reassign Past Data?"
+      description="All of the past data will go under the selected club or selected junior partner."
+      countdownSeconds={5}
+      onConfirm={async () => {
+        if (pendingValues) {
+          await executeSave(pendingValues, true);
+        }
+      }}
+    />
+    </>
   );
 }

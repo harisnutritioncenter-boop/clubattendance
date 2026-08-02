@@ -14,8 +14,8 @@ export interface PaymentLedgerEntry {
   planName?: string;
   totalPlanCost?: number;
   remainingBalance?: number;
-
   branchId: string;
+  juniorPartnerId?: string;
   createdBy: string;
   createdAt: number;
   notes?: string;
@@ -34,5 +34,7 @@ export interface ShakeLedgerEntry {
   createdBy: string;
   createdAt: number;
   notes?: string;
+  batchId?: string | null;
+  batchName?: string | null;
   isArchived: boolean;
 }

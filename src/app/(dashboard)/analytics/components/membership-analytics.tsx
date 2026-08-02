@@ -227,33 +227,26 @@ export function MembershipAnalytics({
         {sortedClubs.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No active members in this plan.</div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {sortedClubs.map(([bId, stats], index) => (
               <div 
                 key={bId} 
                 onClick={() => setSelectedClubId(bId)}
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4 group"
+                className="flex flex-col justify-between p-3.5 sm:p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-3"
               >
-                <div className="flex items-center gap-4">
-                  <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                  <div className="p-3 bg-primary/10 rounded-lg text-primary shrink-0">
-                    <Building className="h-6 w-6" />
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="font-bold text-muted-foreground w-4 shrink-0 mt-0.5 text-sm sm:text-base">{index + 1}.</span>
+                  <div className="p-2 bg-primary/10 rounded-lg text-primary shrink-0">
+                    <Building className="h-5 w-5" />
                   </div>
-                  <div className="font-semibold text-lg text-foreground">{clubs[bId] || 'Unknown Club'}</div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="font-semibold text-base sm:text-lg text-foreground line-clamp-2 leading-tight">{clubs[bId] || 'Unknown Club'}</div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 self-end sm:self-auto shrink-0">
-                  <div className="flex gap-3 text-right mr-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                      <span className="text-[10px] sm:text-xs text-muted-foreground uppercase">Active</span>
-                      <span className="font-bold">{stats.totalActive}</span>
-                    </div>
-                    <div className="w-px h-6 bg-border hidden sm:block"></div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                      <span className="text-[10px] sm:text-xs text-green-600/70 uppercase">New</span>
-                      <span className="font-bold text-green-600 dark:text-green-400">{stats.newThisMonth}</span>
-                    </div>
-                  </div>
-                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
+                <div className="flex items-center justify-end flex-wrap gap-2 shrink-0 mt-1">
+                  <Badge variant="secondary" className="text-sm px-2 py-0.5 bg-primary/5">{stats.totalActive} Active</Badge>
+                  <Badge variant="secondary" className="text-sm px-2 py-0.5 bg-green-500/10 text-green-600 whitespace-nowrap">{stats.newThisMonth} New</Badge>
+                  <ChevronRightIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-primary shrink-0" />
                 </div>
               </div>
             ))}
@@ -300,47 +293,38 @@ export function MembershipAnalytics({
         {sortedPartners.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No active members in this plan.</div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {sortedPartners.map(([pId, stats], index) => (
               <div 
                 key={pId} 
                 onClick={() => setSelectedPartnerId(pId)}
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-4"
+                className="flex flex-col justify-between p-3.5 sm:p-4 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm group gap-3"
               >
-                <div className="flex items-center gap-4">
-                  <span className="font-bold text-muted-foreground w-5 text-right shrink-0">{index + 1}.</span>
-                  <div className="p-3 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
-                    <Users className="h-6 w-6" />
+                <div className="flex items-start gap-3 min-w-0">
+                  <span className="font-bold text-muted-foreground w-4 shrink-0 mt-0.5 text-sm sm:text-base">{index + 1}.</span>
+                  <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+                    <Users className="h-5 w-5" />
                   </div>
-                  <div className="flex flex-col">
+                  <div className="flex flex-col min-w-0">
                     {pId === 'unassigned' ? (
-                      <span className="font-semibold text-lg text-foreground">Unassigned / Admin</span>
+                      <span className="font-semibold text-base sm:text-lg text-foreground line-clamp-2 leading-tight">Unassigned / Admin</span>
                     ) : partners[pId] ? (
                       <Link 
                         href={`/partners/${pId}`} 
                         onClick={(e) => e.stopPropagation()}
-                        className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10"
+                        className="font-semibold text-base sm:text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10 line-clamp-2 leading-tight"
                       >
                         {partners[pId]}
                       </Link>
                     ) : (
-                      <span className="font-semibold text-lg text-muted-foreground">Unknown Partner</span>
+                      <span className="font-semibold text-base sm:text-lg text-muted-foreground line-clamp-2 leading-tight">Unknown Partner</span>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-4 self-end sm:self-auto shrink-0">
-                  <div className="flex gap-3 text-right mr-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                      <span className="text-[10px] sm:text-xs text-muted-foreground uppercase">Active</span>
-                      <span className="font-bold">{stats.totalActive}</span>
-                    </div>
-                    <div className="w-px h-6 bg-border hidden sm:block"></div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                      <span className="text-[10px] sm:text-xs text-green-600/70 uppercase">New</span>
-                      <span className="font-bold text-green-600 dark:text-green-400">{stats.newThisMonth}</span>
-                    </div>
-                  </div>
-                  <ChevronRightIcon className="h-5 w-5 text-muted-foreground group-hover:text-primary hidden sm:block" />
+                <div className="flex items-center justify-end flex-wrap gap-2 shrink-0 mt-1">
+                  <Badge variant="secondary" className="text-sm px-2 py-0.5 bg-primary/5">{stats.totalActive} Active</Badge>
+                  <Badge variant="secondary" className="text-sm px-2 py-0.5 bg-green-500/10 text-green-600 whitespace-nowrap">{stats.newThisMonth} New</Badge>
+                  <ChevronRightIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-primary shrink-0" />
                 </div>
               </div>
             ))}
