@@ -32,13 +32,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             useBranchStore.getState().setActiveBranchId(null);
           }
           
-          setUser(user, role);
+          setUser(user, role, userData);
         } catch (error) {
           console.error('Error fetching user role:', error);
           setUser(user, user.email === 'admin@clubattendance.com' ? 'super_admin' : 'junior_partner'); // Fallback
         }
       } else {
-        setUser(null, null);
+        setUser(null, null, null);
       }
     });
 

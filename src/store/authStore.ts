@@ -8,7 +8,8 @@ interface AuthState {
   user: User | null;
   role: UserRole;
   isLoading: boolean;
-  setUser: (user: User | null, role: UserRole) => void;
+  userData: any;
+  setUser: (user: User | null, role: UserRole, userData?: any) => void;
   setLoading: (isLoading: boolean) => void;
   logout: () => Promise<void>;
 }
@@ -16,8 +17,9 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   role: null,
+  userData: null,
   isLoading: true,
-  setUser: (user, role) => set({ user, role, isLoading: false }),
+  setUser: (user, role, userData = null) => set({ user, role, userData, isLoading: false }),
   setLoading: (isLoading) => set({ isLoading }),
   logout: async () => {
     try {
@@ -25,6 +27,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (error) {
       console.error('Error signing out:', error);
     }
-    set({ user: null, role: null, isLoading: false });
+    set({ user: null, role: null, userData: null, isLoading: false });
   },
 }));

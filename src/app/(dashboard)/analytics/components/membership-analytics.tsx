@@ -22,11 +22,12 @@ interface MembershipAnalyticsProps {
   currentYear: number;
   onNextMonth: () => void;
   onPrevMonth: () => void;
+  activeBranchId?: string | null;
+  user?: any;
+  upgradedPartnerDetails?: any[];
   clubs: Record<string, string>;
   partners: Record<string, string>;
   role?: string | null;
-  activeBranchId?: string | null;
-  user?: any;
 }
 
 export function MembershipAnalytics({ 
@@ -38,7 +39,8 @@ export function MembershipAnalytics({
   partners, 
   role, 
   activeBranchId,
-  user
+  user,
+  upgradedPartnerDetails = []
 }: MembershipAnalyticsProps) {
   const router = useRouter();
   
@@ -76,11 +78,25 @@ export function MembershipAnalytics({
       try {
         const branchIdToFetch = role === 'super_admin' ? null : (activeBranchId || 'default-branch');
         
-        const [fetchedPlans, allCustomers, balances] = await Promise.all([
+        const [fetchedPlans, allCustomers] = await Promise.all([
           MembershipService.getActivePlans(),
-          CustomerService.getActiveCustomers(branchIdToFetch),
-          LedgerService.getAllCustomerBalances(branchIdToFetch)
+          CustomerService.getActiveCustomers(branchIdToFetch)
         ]);
+
+        const balancePromises = allCustomers.map(async (c) => {
+          try {
+            const bal = await LedgerService.getCustomerBalance(c.id);
+            return { id: c.id, bal };
+          } catch {
+            return { id: c.id, bal: null };
+          }
+        });
+        
+        const balancesArray = await Promise.all(balancePromises);
+        const balances: Record<string, any> = {};
+        balancesArray.forEach(item => {
+          if (item.bal) balances[item.id] = item.bal;
+        });
         
         let validCustomers: AugmentedCustomer[] = allCustomers.map(c => ({
           ...c,
@@ -90,6 +106,17 @@ export function MembershipAnalytics({
         // If junior partner, filter to ONLY show their customers
         if (role === 'junior_partner' && user) {
           validCustomers = validCustomers.filter(c => c.juniorPartnerId === user.uid || c.createdBy === user.uid);
+        } else if (role === 'super_admin' && upgradedPartnerDetails.length > 0) {
+          // Apply historical duality for Super Admins
+          const historicalCustomers: AugmentedCustomer[] = [];
+          validCustomers.forEach(c => {
+             const partnerDetail = upgradedPartnerDetails.find(p => p.id === (c.juniorPartnerId || c.createdBy));
+             if (partnerDetail && c.createdAt < partnerDetail.upgradedAt) {
+                c.branchId = partnerDetail.oldClubId || 'orphan-historical';
+                historicalCustomers.push({ ...c, id: `${c.id}_copy`, branchId: partnerDetail.newClubId, isHistoricalCopy: true } as any);
+             }
+          });
+          validCustomers = [...validCustomers, ...historicalCustomers];
         }
 
         if (isActive) {
@@ -196,8 +223,12 @@ export function MembershipAnalytics({
     
     // Get all clubs that have active members for this plan
     const clubTotals: Record<string, { totalActive: number, newThisMonth: number }> = {};
+    Object.keys(clubs).forEach(bId => {
+      clubTotals[bId] = { totalActive: 0, newThisMonth: 0 };
+    });
     
     customers.forEach(c => {
+      if (role === 'super_admin' && (c as any).isHistoricalCopy) return; // DON'T count in club totals for super_admin
       if (c.membershipStatus && !c.membershipStatus.isExpired && c.membershipStatus.latestPlanName === selectedPlanId) {
         const bId = c.branchId || 'unknown';
         if (!clubTotals[bId]) clubTotals[bId] = { totalActive: 0, newThisMonth: 0 };
@@ -259,20 +290,21 @@ export function MembershipAnalytics({
   const renderPartnerLevel = () => {
     if (!selectedPlanId || !selectedClubId) return null;
 
-    const partnerTotals: Record<string, { totalActive: number, newThisMonth: number }> = {};
+    const clubCustomers = customers.filter(c => c.branchId === selectedClubId && c.membershipStatus && !c.membershipStatus.isExpired && c.membershipStatus.latestPlanName === selectedPlanId);
     
-    customers.forEach(c => {
-      if (c.branchId === selectedClubId && c.membershipStatus && !c.membershipStatus.isExpired && c.membershipStatus.latestPlanName === selectedPlanId) {
-        const pId = c.juniorPartnerId || c.createdBy || 'unassigned';
-        if (!partnerTotals[pId]) partnerTotals[pId] = { totalActive: 0, newThisMonth: 0 };
-        
-        partnerTotals[pId].totalActive += 1;
-        
-        if (c.membershipStatus.planAssignedAt) {
-          const date = new Date(c.membershipStatus.planAssignedAt);
-          if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-            partnerTotals[pId].newThisMonth += 1;
-          }
+    // Aggregate by partner
+    const partnerTotals: Record<string, { totalActive: number, newThisMonth: number, hasHistorical: boolean }> = {};
+    clubCustomers.forEach(c => {
+      const pId = c.juniorPartnerId || c.createdBy || 'unassigned';
+      if (!partnerTotals[pId]) partnerTotals[pId] = { totalActive: 0, newThisMonth: 0, hasHistorical: false };
+      
+      partnerTotals[pId].totalActive += 1;
+      if ((c as any).isHistoricalCopy) partnerTotals[pId].hasHistorical = true;
+      
+      if (c.membershipStatus?.planAssignedAt) {
+        const date = new Date(c.membershipStatus.planAssignedAt);
+        if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
+          partnerTotals[pId].newThisMonth += 1;
         }
       }
     });
@@ -282,7 +314,7 @@ export function MembershipAnalytics({
     return (
       <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
-          {role === 'super_admin' && (
+          {(role === 'super_admin' || role === 'club_owner') && (
             <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 shrink-0 self-start">
               <ChevronLeftIcon className="h-4 w-4" /> Back
             </Button>

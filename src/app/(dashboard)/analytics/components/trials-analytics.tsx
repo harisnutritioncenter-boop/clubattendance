@@ -17,10 +17,11 @@ interface TrialsAnalyticsProps {
   user: any;
   activeBranchId: string | null;
   clubs: Record<string, string>;
-  partners: Record<string, string>;
   onDrillDownStateChange: (isDrilledDown: boolean) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
+  upgradedPartnerDetails?: any[];
+  partners: Record<string, string>;
 }
 
 export function TrialsAnalytics({
@@ -33,7 +34,8 @@ export function TrialsAnalytics({
   partners,
   onDrillDownStateChange,
   onPrevMonth,
-  onNextMonth
+  onNextMonth,
+  upgradedPartnerDetails = []
 }: TrialsAnalyticsProps) {
   const [trials, setTrials] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,10 @@ export function TrialsAnalytics({
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
   const [clubViewMode, setClubViewMode] = useState<'partner' | 'customer'>('partner');
 
-  const isDrilledDown = selectedClubId !== null || selectedPartnerId !== null;
+  const isDrilledDown = 
+    role === 'super_admin' ? (selectedClubId !== null || selectedPartnerId !== null) :
+    role === 'club_owner' ? (selectedPartnerId !== null) :
+    false;
 
   useEffect(() => {
     onDrillDownStateChange(isDrilledDown);
@@ -74,6 +79,17 @@ export function TrialsAnalytics({
         // If junior partner, filter to ONLY show their trials
         if (role === 'junior_partner' && user) {
           filteredTrials = filteredTrials.filter(c => c.juniorPartnerId === user.uid || c.createdBy === user.uid);
+        } else if (role === 'super_admin' && upgradedPartnerDetails.length > 0) {
+          // Apply historical duality for Super Admins
+          const historicalTrials: Customer[] = [];
+          filteredTrials.forEach(c => {
+             const partnerDetail = upgradedPartnerDetails.find(p => p.id === (c.juniorPartnerId || c.createdBy));
+             if (partnerDetail && c.createdAt < partnerDetail.upgradedAt) {
+                c.branchId = partnerDetail.oldClubId || 'orphan-historical';
+                historicalTrials.push({ ...c, id: `${c.id}_copy`, branchId: partnerDetail.newClubId, isHistoricalCopy: true } as any);
+             }
+          });
+          filteredTrials = [...filteredTrials, ...historicalTrials];
         }
 
         if (isActive) {
@@ -145,7 +161,13 @@ export function TrialsAnalytics({
   const renderClubLevel = () => {
     // Aggregate by club
     const clubTotals: Record<string, { total: number, notConverted: number }> = {};
+    Object.keys(clubs).forEach(bId => {
+      clubTotals[bId] = { total: 0, notConverted: 0 };
+    });
+    
     trials.forEach(c => {
+      if ((c as any).isHistoricalCopy) return; // DON'T count in club totals
+      
       const bId = c.branchId || 'unknown';
       if (!clubTotals[bId]) clubTotals[bId] = { total: 0, notConverted: 0 };
       clubTotals[bId].total += 1;
@@ -192,12 +214,13 @@ export function TrialsAnalytics({
     const clubTrials = trials.filter(c => c.branchId === selectedClubId);
     
     // Aggregate by partner
-    const partnerTotals: Record<string, { total: number, notConverted: number }> = {};
+    const partnerTotals: Record<string, { total: number, notConverted: number, hasHistorical: boolean }> = {};
     clubTrials.forEach(c => {
       const pId = c.juniorPartnerId || c.createdBy || 'unassigned';
-      if (!partnerTotals[pId]) partnerTotals[pId] = { total: 0, notConverted: 0 };
+      if (!partnerTotals[pId]) partnerTotals[pId] = { total: 0, notConverted: 0, hasHistorical: false };
       partnerTotals[pId].total += 1;
       if (c.isTrial) partnerTotals[pId].notConverted += 1;
+      if ((c as any).isHistoricalCopy) partnerTotals[pId].hasHistorical = true;
     });
 
     const sortedPartners = Object.entries(partnerTotals).sort((a, b) => b[1].total - a[1].total);
@@ -257,6 +280,11 @@ export function TrialsAnalytics({
                         </Link>
                       ) : (
                         <span className="font-semibold text-base sm:text-lg text-muted-foreground line-clamp-2 leading-tight">Unknown Partner</span>
+                      )}
+                      {stats.hasHistorical && (
+                        <Badge variant="outline" className="text-[10px] mt-1 bg-blue-500/5 text-blue-600 w-fit">
+                          Junior Partner (Historical)
+                        </Badge>
                       )}
                     </div>
                   </div>

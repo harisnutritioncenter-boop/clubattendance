@@ -105,6 +105,7 @@ export function RevenueAnalytics({
   };
 
   const getEffectiveBranchId = (p: PaymentLedgerEntry, customer?: Customer) => {
+    if (p.branchId === 'orphan-historical') return 'unknown'; // intercept before fallback
     if (p.branchId && p.branchId !== 'unassigned' && clubs[p.branchId]) return p.branchId;
     if (customer?.branchId && customer.branchId !== 'unassigned' && clubs[customer.branchId]) return customer.branchId;
     return 'unknown';
@@ -130,11 +131,17 @@ export function RevenueAnalytics({
   const renderClubLevel = () => {
     const customerMap = getCustomerMap();
     const clubTotals: Record<string, { totalRevenue: number, count: number }> = {};
+    Object.keys(clubs).forEach(bId => {
+      clubTotals[bId] = { totalRevenue: 0, count: 0 };
+    });
     
     payments.forEach(p => {
       const customer = customerMap[p.customerId];
       const bId = getEffectiveBranchId(p, customer);
       if (!clubTotals[bId]) clubTotals[bId] = { totalRevenue: 0, count: 0 };
+      
+      if ((p as any).isHistoricalCopy) return; // DON'T count in global club totals
+      
       clubTotals[bId].totalRevenue += p.amount;
       clubTotals[bId].count += 1;
     });
@@ -189,7 +196,7 @@ export function RevenueAnalytics({
     if (!selectedClubId) return null;
 
     const customerMap = getCustomerMap();
-    const partnerTotals: Record<string, { totalRevenue: number, count: number }> = {};
+    const partnerTotals: Record<string, { totalRevenue: number, count: number, hasHistorical: boolean }> = {};
     
     payments.forEach(p => {
       const customer = customerMap[p.customerId];
@@ -197,9 +204,11 @@ export function RevenueAnalytics({
       
       if (bId === selectedClubId) {
         const pId = getEffectivePartnerId(p, customer);
-        if (!partnerTotals[pId]) partnerTotals[pId] = { totalRevenue: 0, count: 0 };
+        if (!partnerTotals[pId]) partnerTotals[pId] = { totalRevenue: 0, count: 0, hasHistorical: false };
+        
         partnerTotals[pId].totalRevenue += p.amount;
         partnerTotals[pId].count += 1;
+        if ((p as any).isHistoricalCopy) partnerTotals[pId].hasHistorical = true;
       }
     });
 
@@ -244,13 +253,20 @@ export function RevenueAnalytics({
                     {pId === 'unassigned' ? (
                       <span className="font-semibold text-lg text-foreground line-clamp-1">Unassigned / Admin</span>
                     ) : partners[pId] ? (
-                      <Link 
-                        href={`/partners/${pId}`} 
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10 line-clamp-1"
-                      >
-                        {partners[pId]}
-                      </Link>
+                      <div className="flex flex-col">
+                        <Link 
+                          href={`/partners/${pId}`} 
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-semibold text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10 line-clamp-1"
+                        >
+                          {partners[pId]}
+                        </Link>
+                        {stats.hasHistorical && (
+                          <Badge variant="secondary" className="text-[10px] w-fit mt-1 bg-blue-100 text-blue-800 hover:bg-blue-200">
+                            Junior Partner (Historical)
+                          </Badge>
+                        )}
+                      </div>
                     ) : (
                       <span className="font-semibold text-lg text-muted-foreground line-clamp-1">Unknown Partner</span>
                     )}

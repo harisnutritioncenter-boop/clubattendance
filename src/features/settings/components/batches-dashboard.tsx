@@ -28,7 +28,9 @@ export function BatchesDashboard() {
       const targetBranchId = activeBranchId || (user as any)?.clubId || 'default-branch';
       if (!targetBranchId) return;
 
-      const q = query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId));
+      const q = targetBranchId === 'default-branch'
+        ? query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId))
+        : query(COLLECTIONS.BATCHES, where('branchId', 'in', ['default-branch', targetBranchId]));
       const snap = await getDocs(q);
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));

@@ -5,7 +5,7 @@ import { Users, UserCheck, UsersRound, IndianRupee, Coffee, BadgeCent, CreditCar
 import { StatCard } from './stat-card';
 import { CustomerService } from '@/features/customers/services/customer.service';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
-import { useBranchStore } from '@/store';
+import { useBranchStore, useAuthStore } from '@/store';
 import Link from 'next/link';
 import { getDocs } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
@@ -46,11 +46,19 @@ export function AdminDashboard() {
       const trialCount = customers.filter(c => c.isTrial).length;
       const membersCount = customers.length - trialCount;
 
+      // Calculate Revenue and Consumptions from reportsData so that historical clones (from before they upgraded) are included
+      const calculatedRevenue = reportsData.payments.reduce((acc, p) => acc + (p.amount || 0), 0);
+      
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const calculatedConsumptionsToday = reportsData.consumptions
+         .filter(c => c.createdAt >= startOfDay)
+         .reduce((acc, c) => acc + (c.shakesDeducted || 1), 0);
+
       setMetrics({
         activeMembers: membersCount,
         trialCustomers: trialCount,
-        revenue,
-        consumptionsToday: consumptions
+        revenue: calculatedRevenue,
+        consumptionsToday: calculatedConsumptionsToday
       });
 
       // Calculate Top Partner
@@ -105,9 +113,9 @@ export function AdminDashboard() {
         <Link href="/renewals" className="transition-transform hover:scale-105 active:scale-95 block">
           <StatCard title="Renewals" value="View" icon={RefreshCcw} description="Manage expiring plans" />
         </Link>
-        <div className="transition-transform hover:scale-105 block">
+        {/* <div className="transition-transform hover:scale-105 block">
           <StatCard title="Top Partner" value={topPartner.name} icon={Award} description={`${topPartner.conversions} conversions this month`} />
-        </div>
+        </div> */}
       </div>
     </div>
   );

@@ -30,6 +30,7 @@ export interface CustomerMembershipStatus {
   
   // We can track validity by finding the latest membership purchase in the payment ledger
   latestPlanName?: string;
+  planAssignedAt?: number;
   validUntil?: number; 
   isExpired: boolean;
   

@@ -103,7 +103,19 @@ export class CustomerService {
     ) {
       let customers = this.activeCustomersCache;
       if (branchId && branchId !== 'default-branch' && branchId !== 'all') {
-        customers = customers.filter(c => c.branchId === branchId);
+        const { useAuthStore } = require('@/store');
+        const authState = useAuthStore.getState();
+        const role = authState.role;
+        const uid = authState.user?.uid;
+        
+        if (role === 'club_owner' && uid) {
+          customers = customers.filter(c => c.branchId === branchId || c.juniorPartnerId === uid || c.createdBy === uid).map(c => ({
+            ...c,
+            branchId: branchId
+          }));
+        } else {
+          customers = customers.filter(c => c.branchId === branchId);
+        }
       }
       return customers;
     }
@@ -122,7 +134,20 @@ export class CustomerService {
     this.cacheTimestamp = Date.now();
     
     if (branchId && branchId !== 'default-branch' && branchId !== 'all') {
-      customers = customers.filter(c => c.branchId === branchId);
+      // Dynamic fallback for Club Owners to auto-recover any customers that failed to migrate properly
+      const { useAuthStore } = require('@/store');
+      const authState = useAuthStore.getState();
+      const role = authState.role;
+      const uid = authState.user?.uid;
+      
+      if (role === 'club_owner' && uid) {
+        customers = customers.filter(c => c.branchId === branchId || c.juniorPartnerId === uid || c.createdBy === uid).map(c => ({
+          ...c,
+          branchId: branchId // Force them to belong to the new club in local state
+        }));
+      } else {
+        customers = customers.filter(c => c.branchId === branchId);
+      }
     }
     
     return customers;

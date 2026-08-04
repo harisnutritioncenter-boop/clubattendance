@@ -47,6 +47,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const user = useAuthStore(state => state.user);
+  const currentUserRole = useAuthStore(state => state.role);
   
   const [isClubAssignOpen, setIsClubAssignOpen] = useState(false);
   const [selectedClubId, setSelectedClubId] = useState<string>(partner.clubId || '');
@@ -102,7 +103,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
             <div className="flex items-center gap-2 group">
               <Building2 className="h-4 w-4 text-muted-foreground" />
               <span>{clubName}</span>
-              {partner.role !== 'super_admin' && (
+              {currentUserRole === 'super_admin' && partner.role === 'junior_partner' && (
                 <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
                   <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary opacity-0 group-hover:opacity-100 transition-opacity ml-2 h-6 px-2" />}>
                     Change
@@ -132,7 +133,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
                 </Dialog>
               )}
             </div>
-          ) : partner.role !== 'super_admin' ? (
+          ) : (currentUserRole === 'super_admin' && partner.role === 'junior_partner') ? (
             <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
               <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary" />}>
                 Assign Club
@@ -368,7 +369,7 @@ export default function PartnersPage() {
                 </div>
               )}
 
-              {role === 'junior_partner' && (
+              {role === 'junior_partner' && currentUserRole === 'super_admin' && (
                 <div className="space-y-2">
                   <Label>Assign to Club</Label>
                   <Select value={selectedClubId} onValueChange={(v) => setSelectedClubId(v || '')}>
@@ -383,6 +384,12 @@ export default function PartnersPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+              {role === 'junior_partner' && currentUserRole === 'club_owner' && (
+                <div className="space-y-2">
+                  <Label>Assign to Club</Label>
+                  <Input disabled value={clubs.find(c => c.id === (partners.find(u => u.id === currentUser?.uid)?.clubId))?.name || 'Your Club'} />
                 </div>
               )}
 

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, mobile, date, time, consumed, total, remaining } = body;
+    const { name, mobile, date, batch, consumed, total, remaining } = body;
 
     if (!mobile || !name) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -35,9 +35,9 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         number: formattedMobile,
-        name: name,
+        name: name ? name.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim() : name,
         date: date,
-        time: time,
+        batch: batch ? batch.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim() : batch,
         consumed: consumed,
         total: total,
         remaining: remaining

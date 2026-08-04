@@ -96,7 +96,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
         const [usersSnap, customersList, branchesSnap, plansList] = await Promise.all([
           getDocs(COLLECTIONS.USERS),
           CustomerService.getActiveCustomers(null), // global
-          role === 'super_admin' ? getDocs(COLLECTIONS.BRANCHES) : Promise.resolve({ docs: [] }),
+          getDocs(COLLECTIONS.BRANCHES),
           MembershipService.getActivePlans()
         ]);
 
@@ -132,7 +132,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
   // Filter Junior Partners
   useEffect(() => {
     let filtered = allJuniorPartners;
-    
+
     // Regular users (junior partners, club owners) only see their branch's JPs
     if (role !== 'super_admin') {
       if (activeBranchId) {
@@ -146,7 +146,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
       const branchName = branches.find(b => b.id === jp.branchId)?.name || 'Unknown Club';
       return { 
         value: jp.id, 
-        label: role === 'super_admin' ? `${jp.name} (${branchName})` : jp.name 
+        label: `${jp.name} (${branchName})` 
       };
     }));
     
@@ -385,7 +385,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
         <div className="p-5 bg-muted/20 border rounded-xl space-y-4">
           <h3 className="font-semibold text-sm">Assignment Options</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {role === 'super_admin' && (
+            {role === 'super_admin' && !isTrial && (
               <FormField
                 control={form.control}
                 name="branchId"

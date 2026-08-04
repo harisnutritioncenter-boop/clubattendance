@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, BarChart, Users, Building, ChevronRightIcon, Activity, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BarChart, Users, Building, ChevronRightIcon, Activity, ArrowLeft, Trash2 } from 'lucide-react';
 import { useAuthStore, useBranchStore } from '@/store';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { CustomerService } from '@/features/customers/services/customer.service';
@@ -19,6 +19,7 @@ import { CalendarDays, CreditCard } from 'lucide-react';
 import { TrialsAnalytics } from './components/trials-analytics';
 import { MembershipAnalytics } from './components/membership-analytics';
 import { RevenueAnalytics } from './components/revenue-analytics';
+import { toast } from 'sonner';
 
 const monthNames = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
@@ -44,6 +45,7 @@ function AnalyticsPageContent() {
   const [isTrialsDrilledDown, setIsTrialsDrilledDown] = useState(false);
   
   const [consumptions, setConsumptions] = useState<ShakeLedgerEntry[]>([]);
+  const [upgradedPartnerDetails, setUpgradedPartnerDetails] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Mappings
@@ -110,7 +112,8 @@ function AnalyticsPageContent() {
       // For super admin, we pass null to fetch all branches. Others use their activeBranchId
       const branchIdToFetch = role === 'super_admin' ? null : (activeBranchId || 'default-branch');
       
-      const { consumptions: allMonthConsumptions } = await LedgerService.getReportsData(branchIdToFetch, startDate, endDate);
+      const { consumptions: allMonthConsumptions, upgradedPartnerDetails: fetchedDetails } = await LedgerService.getReportsData(branchIdToFetch, startDate, endDate);
+      setUpgradedPartnerDetails(fetchedDetails || []);
       
       let filteredConsumptions = allMonthConsumptions;
 
@@ -155,10 +158,31 @@ function AnalyticsPageContent() {
     if (selectedDateStr) router.push('/analytics');
   };
 
+  const handleRevert = async (e: React.MouseEvent, c: ShakeLedgerEntry) => {
+    e.stopPropagation();
+    if (role === 'junior_partner') {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (c.createdAt < sevenDaysAgo) {
+        toast.error('Junior Partners can only revert consumptions within 7 days.');
+        return;
+      }
+    }
+
+    if (!confirm('Are you sure you want to revert this shake consumption? This will refund the shake.')) return;
+
+    try {
+      await LedgerService.voidConsumption(c.id, user?.uid || 'system');
+      toast.success('Consumption reverted successfully');
+      setConsumptions(prev => prev.filter(l => l.id !== c.id));
+    } catch (error: any) {
+      toast.error('Failed to revert consumption: ' + error.message);
+    }
+  };
+
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
 
-  const totalMonthShakes = consumptions.reduce((sum, c) => sum + (c.shakesDeducted || 1), 0);
+  const totalMonthShakes = consumptions.reduce((sum, c) => (role === 'super_admin' && (c as any).isHistoricalCopy) ? sum : sum + (c.shakesDeducted || 1), 0);
 
   // Helper to get consumptions for a specific day
   const getConsumptionsForDay = (dayOrDateStr: number | string) => {
@@ -173,7 +197,9 @@ function AnalyticsPageContent() {
     }).map(c => {
       // Fix bad historical data on the fly
       let bId = c.branchId;
-      if (!bId || bId === 'default-branch' || (Object.keys(clubs).length > 0 && !clubs[bId])) {
+      if (bId === 'orphan-historical') {
+         bId = 'unknown'; // intercept
+      } else if (!bId || bId === 'default-branch' || (Object.keys(clubs).length > 0 && !clubs[bId])) {
          bId = customers[c.customerId]?.branchId || bId;
       }
       let pId = c.juniorPartnerId;
@@ -216,9 +242,14 @@ function AnalyticsPageContent() {
   const renderClubLevel = (dayConsumptions: ShakeLedgerEntry[]) => {
     // Aggregate by club and keep track of batches
     const clubTotals: Record<string, { total: number, batches: Record<string, number> }> = {};
+    Object.keys(clubs).forEach(bId => {
+      clubTotals[bId] = { total: 0, batches: {} };
+    });
     dayConsumptions.forEach(c => {
       const bId = c.branchId || 'unknown';
       if (!clubTotals[bId]) clubTotals[bId] = { total: 0, batches: {} };
+      
+      if (role === 'super_admin' && (c as any).isHistoricalCopy) return; // DON'T count in club totals for super_admin
       
       const shakes = c.shakesDeducted || 1;
       clubTotals[bId].total += shakes;
@@ -276,13 +307,20 @@ function AnalyticsPageContent() {
     const clubConsumptions = dayConsumptions.filter(c => c.branchId === selectedClubId);
     
     // Aggregate by partner. We use the customer's assigned partner if available, fallback to the person who marked it.
-    const partnerTotals: Record<string, number> = {};
+    const partnerData: Record<string, { total: number, batches: Record<string, number> }> = {};
     clubConsumptions.forEach(c => {
       const pId = c.juniorPartnerId || customers[c.customerId]?.assignedTo || c.createdBy || 'unassigned';
-      partnerTotals[pId] = (partnerTotals[pId] || 0) + (c.shakesDeducted || 1);
+      if (!partnerData[pId]) partnerData[pId] = { total: 0, batches: {} };
+      
+      const shakes = c.shakesDeducted || 1;
+      partnerData[pId].total += shakes;
+      
+      if (c.batchName) {
+        partnerData[pId].batches[c.batchName] = (partnerData[pId].batches[c.batchName] || 0) + shakes;
+      }
     });
 
-    const sortedPartners = Object.entries(partnerTotals).sort((a, b) => b[1] - a[1]);
+    const sortedPartners = Object.entries(partnerData).sort((a, b) => b[1].total - a[1].total);
 
     // Group by Batch for the "customer" view mode
     const batchesMap: Record<string, ShakeLedgerEntry[]> = {};
@@ -297,7 +335,7 @@ function AnalyticsPageContent() {
       <div className="space-y-6 mt-6 animate-in slide-in-from-right-4 duration-300">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h2 className="text-xl font-bold text-foreground">
-            Club Overview {role === 'super_admin' && <span className="text-muted-foreground font-normal text-sm ml-2">({clubs[selectedClubId || ''] || 'Unknown Club'})</span>}
+            {role === 'club_owner' ? 'Partners Overview' : 'Club Overview'} {role === 'super_admin' && <span className="text-muted-foreground font-normal text-sm ml-2">({clubs[selectedClubId || ''] || 'Unknown Club'})</span>}
           </h2>
           
           <div className="flex bg-muted/50 p-1 rounded-lg border shadow-sm">
@@ -321,7 +359,7 @@ function AnalyticsPageContent() {
             {sortedPartners.length === 0 ? (
               <div className="col-span-full text-center py-12 text-muted-foreground bg-card rounded-xl border border-dashed">No attendances found for this club.</div>
             ) : (
-              sortedPartners.map(([pId, total], index) => (
+              sortedPartners.map(([pId, data], index) => (
                 <div 
                   key={pId} 
                   onClick={() => router.push(`/analytics?date=${selectedDateStr}&clubId=${selectedClubId}&partnerId=${pId}`)}
@@ -332,7 +370,7 @@ function AnalyticsPageContent() {
                     <div className="p-2 bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
                       <Users className="h-5 w-5" />
                     </div>
-                    <div className="flex flex-col min-w-0">
+                    <div className="flex flex-col gap-1.5 min-w-0">
                       {pId === 'unassigned' ? (
                         <span className="font-semibold text-base sm:text-lg text-foreground line-clamp-2 leading-tight">Unassigned / Admin</span>
                       ) : partners[pId] ? (
@@ -346,10 +384,22 @@ function AnalyticsPageContent() {
                       ) : (
                         <span className="font-semibold text-base sm:text-lg text-muted-foreground line-clamp-2 leading-tight">Unknown Partner</span>
                       )}
+                      
+                      {Object.keys(data.batches).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {Object.entries(data.batches)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([batchName, count]) => (
+                              <Badge key={batchName} variant="outline" className="text-[10px] sm:text-xs font-medium text-muted-foreground bg-muted/30 px-1.5 py-0 whitespace-nowrap">
+                                {batchName}: {count}
+                              </Badge>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center justify-end flex-wrap gap-2 shrink-0 mt-1">
-                    <Badge variant="secondary" className="text-sm sm:text-base px-2 py-0.5 bg-primary/5 whitespace-nowrap">{total} Shakes</Badge>
+                    <Badge variant="secondary" className="text-sm sm:text-base px-2 py-0.5 bg-primary/5 whitespace-nowrap">{data.total} Shakes</Badge>
                     <ChevronRightIcon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-primary shrink-0" />
                   </div>
                 </div>
@@ -363,7 +413,12 @@ function AnalyticsPageContent() {
             ) : (
               sortedBatches.map(batchName => (
                 <div key={batchName} className="space-y-3 bg-card p-4 rounded-xl border shadow-sm">
-                  <h3 className="font-bold text-lg text-primary border-b pb-2 mb-3">{batchName}</h3>
+                  <div className="flex items-center justify-between border-b pb-2 mb-3">
+                    <h3 className="font-bold text-lg text-primary">{batchName}</h3>
+                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                      {batchesMap[batchName].reduce((sum, c) => sum + (c.shakesDeducted || 1), 0)} Total
+                    </Badge>
+                  </div>
                   {batchesMap[batchName].map((c, index) => (
                     <div key={c.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-transparent hover:border-border transition-colors">
                       <div className="flex items-center gap-4">
@@ -384,7 +439,12 @@ function AnalyticsPageContent() {
                           </span>
                         </div>
                       </div>
-                      <Badge variant="outline" className="shrink-0">{c.shakesDeducted || 1} {c.shakesDeducted === 1 ? 'Shake' : 'Shakes'}</Badge>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="outline">{c.shakesDeducted || 1} {c.shakesDeducted === 1 ? 'Shake' : 'Shakes'}</Badge>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-50 hover:opacity-100 transition-opacity" onClick={(e) => handleRevert(e, c)} title="Revert Consumption">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -426,6 +486,11 @@ function AnalyticsPageContent() {
                       </span>
                     )}
                     <div className="text-sm text-muted-foreground mt-1 font-medium flex items-center flex-wrap gap-2">
+                      {(c as any).isHistoricalCopy && (
+                        <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-800 hover:bg-blue-200 px-1.5 py-0 whitespace-nowrap">
+                          Junior Partner (Historical)
+                        </Badge>
+                      )}
                       <span>Marked at {formatDateTime(c.createdAt).split(' ')[1] || 'Unknown Time'}</span>
                       {c.batchName && (
                         <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground bg-muted/30 px-1.5 py-0 whitespace-nowrap">
@@ -435,11 +500,14 @@ function AnalyticsPageContent() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 shrink-0 mt-1">
-                  <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20 px-3 py-0.5 text-sm sm:text-base">
-                    +{c.shakesDeducted || 1}
-                  </Badge>
-                </div>
+                  <div className="flex items-center justify-end flex-wrap gap-2 shrink-0 mt-1">
+                    <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20 px-3 py-0.5 text-sm sm:text-base">
+                      +{c.shakesDeducted || 1}
+                    </Badge>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-50 hover:opacity-100 transition-opacity ml-1" onClick={(e) => handleRevert(e, c)} title="Revert Consumption">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
               </div>
             ))
           )}
@@ -528,7 +596,7 @@ function AnalyticsPageContent() {
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
               const dayConsumptions = getConsumptionsForDay(day);
-              const totalShakes = dayConsumptions.reduce((sum, c) => sum + (c.shakesDeducted || 1), 0);
+              const totalShakes = dayConsumptions.reduce((sum, c) => (role === 'super_admin' && (c as any).isHistoricalCopy) ? sum : sum + (c.shakesDeducted || 1), 0);
               const hasAttendance = totalShakes > 0;
               const isToday = new Date().toDateString() === new Date(currentYear, currentMonth, day).toDateString();
 
@@ -572,6 +640,7 @@ function AnalyticsPageContent() {
             activeBranchId={activeBranchId}
             clubs={clubs}
             partners={partners}
+            upgradedPartnerDetails={upgradedPartnerDetails}
             onDrillDownStateChange={setIsTrialsDrilledDown}
             onPrevMonth={prevMonth}
             onNextMonth={nextMonth}
@@ -587,6 +656,7 @@ function AnalyticsPageContent() {
             activeBranchId={activeBranchId}
             clubs={clubs}
             partners={partners}
+            upgradedPartnerDetails={upgradedPartnerDetails}
             onPrevMonth={prevMonth}
             onNextMonth={nextMonth}
           />

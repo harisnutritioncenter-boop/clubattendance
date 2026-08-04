@@ -1,5 +1,6 @@
 import { addDoc, getDocs, query, where, orderBy, doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
+import { useAuthStore, useHistoryStore } from '@/store';
 import { cleanPayload } from '@/lib/utils';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '../types/ledger.types';
 import { CustomerMembershipStatus } from '@/features/memberships/types/membership.types';
@@ -276,6 +277,7 @@ export class LedgerService {
     
     let validUntil: number | undefined = undefined;
     let latestPlanName: string | undefined = undefined;
+    let planAssignedAt: number | undefined = undefined;
     let totalFinancialBalance = 0;
 
     for (const entry of allEntries) {
@@ -296,7 +298,10 @@ export class LedgerService {
         }
 
         if (payment.remainingBalance) totalFinancialBalance += payment.remainingBalance;
-        if (payment.planName) latestPlanName = payment.planName;
+        if (payment.planName) {
+          latestPlanName = payment.planName;
+          planAssignedAt = payment.createdAt;
+        }
         if (payment.validityDays) validUntil = payment.createdAt + (payment.validityDays * 24 * 60 * 60 * 1000);
 
       } else if (entry.type === 'Debt Collection') {
@@ -323,6 +328,7 @@ export class LedgerService {
       totalShakesConsumed: cycleConsumed,
       remainingShakes,
       latestPlanName,
+      planAssignedAt,
       validUntil,
       isExpired,
       remainingBalance: totalFinancialBalance
@@ -394,22 +400,121 @@ export class LedgerService {
       where('branchId', '==', branchId)
     ) : query(COLLECTIONS.PAYMENT_LEDGER);
     const paymentsSnap = await getDocs(paymentsQuery);
-    const payments = paymentsSnap.docs
+    let payments = paymentsSnap.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as PaymentLedgerEntry))
-      .filter(d => !d.isArchived && d.createdAt >= startDate && d.createdAt <= endDate)
-      .sort((a, b) => b.createdAt - a.createdAt);
+      .filter(d => !d.isArchived && d.createdAt >= startDate && d.createdAt <= endDate);
 
     const consumptionsQuery = branchId ? query(
       COLLECTIONS.SHAKE_LEDGER,
       where('branchId', '==', branchId)
     ) : query(COLLECTIONS.SHAKE_LEDGER);
     const consumptionsSnap = await getDocs(consumptionsQuery);
-    const consumptions = consumptionsSnap.docs
-      .map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry))
-      .filter(d => !d.isArchived && d.createdAt >= startDate && d.createdAt <= endDate)
-      .sort((a, b) => b.createdAt - a.createdAt);
 
-    return { payments, consumptions };
+    let consumptions = consumptionsSnap.docs
+      .map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry))
+      .filter(d => !d.isArchived && d.createdAt >= startDate && d.createdAt <= endDate);
+
+    let upgradedPartnerDetails: Array<{ id: string, upgradedAt: number, newClubId: string, oldClubId?: string }> = [];
+
+    // Dynamic Historic Merging for Upgraded Club Owners
+    try {
+      const authState = useAuthStore.getState();
+      
+      // For Club Owners: fetch and merge their own history
+      if (authState.role === 'club_owner' && authState.userData?.previousRole === 'junior_partner' && authState.userData?.upgradedToClubOwnerAt) {
+        const historyStore = useHistoryStore.getState();
+        await historyStore.fetchHistoricalData(authState.user!.uid, authState.userData.upgradedToClubOwnerAt);
+        const { historicalConsumptions, historicalPayments } = useHistoryStore.getState();
+        
+        const currentClubId = authState.userData.clubId || authState.userData.branchId;
+        const mergedPayments = historicalPayments
+          .filter(d => d.createdAt >= startDate && d.createdAt <= endDate)
+          .map(p => ({ ...p, branchId: currentClubId, isHistoricalCopy: true }));
+          
+        const mergedConsumptions = historicalConsumptions
+          .filter(d => d.createdAt >= startDate && d.createdAt <= endDate)
+          .map(c => ({ ...c, branchId: currentClubId, isHistoricalCopy: true }));
+        
+        payments = [...payments, ...mergedPayments];
+        consumptions = [...consumptions, ...mergedConsumptions];
+      }
+      
+      // For Super Admins: clone historical entries for display in the new clubs
+      if (authState.role === 'super_admin') {
+        const usersSnap = await getDocs(query(COLLECTIONS.USERS, where('role', '==', 'club_owner')));
+        const upgradedPartners = usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => (p as any).previousRole === 'junior_partner' && (p as any).upgradedToClubOwnerAt);
+        
+        const customersSnap = await getDocs(query(COLLECTIONS.CUSTOMERS));
+        const customersData = customersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        const belongsToPartner = (record: any, partnerId: string) => {
+          if (record.juniorPartnerId && record.juniorPartnerId !== 'unassigned') return record.juniorPartnerId === partnerId;
+          if (record.createdBy === partnerId) return true;
+          const customer = customersData.find(c => c.id === record.customerId) as any;
+          if (customer?.juniorPartnerId && customer.juniorPartnerId !== 'unassigned') return customer.juniorPartnerId === partnerId;
+          return false;
+        };
+
+        const historicalShakeCopies: ShakeLedgerEntry[] = [];
+        const historicalPaymentCopies: PaymentLedgerEntry[] = [];
+        
+        upgradedPartners.forEach(p => {
+          const upgradedAt = (p as any).upgradedToClubOwnerAt;
+          const newClubId = (p as any).clubId;
+          
+          // Determine the OLD club ID for this partner by looking at a valid past shake or payment from the ENTIRE history
+          const allConsumptions = consumptionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry));
+          const allPayments = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentLedgerEntry));
+          
+          const oldClubShake = allConsumptions.find(c => belongsToPartner(c, p.id) && c.createdAt < upgradedAt && c.branchId && c.branchId !== 'default-branch' && c.branchId !== newClubId);
+          const oldClubPayment = allPayments.find(pay => belongsToPartner(pay, p.id) && pay.createdAt < upgradedAt && pay.branchId && pay.branchId !== 'default-branch' && pay.branchId !== newClubId);
+          const oldClubId = oldClubShake ? oldClubShake.branchId : (oldClubPayment ? oldClubPayment.branchId : undefined);
+          
+          upgradedPartnerDetails.push({
+            id: p.id,
+            upgradedAt,
+            newClubId,
+            oldClubId
+          });
+          
+          // Pre-fix any missing branchIds on past records so the UI doesn't map them to the customer's new club
+          consumptions.forEach(c => {
+            if (belongsToPartner(c, p.id) && c.createdAt < upgradedAt) {
+              if (!c.branchId || c.branchId === 'default-branch') {
+                c.branchId = oldClubId || 'orphan-historical';
+              }
+            }
+          });
+          payments.forEach(payment => {
+            if (belongsToPartner(payment, p.id) && payment.createdAt < upgradedAt) {
+              if (!payment.branchId || payment.branchId === 'default-branch' || payment.branchId === 'unassigned') {
+                payment.branchId = oldClubId || 'orphan-historical';
+              }
+            }
+          });
+          
+          const pastShakes = consumptions.filter(c => belongsToPartner(c, p.id) && c.createdAt < upgradedAt && !(c as any).isHistoricalCopy);
+          pastShakes.forEach(shake => {
+            historicalShakeCopies.push({ ...shake, id: `${shake.id}_copy`, branchId: (p as any).clubId, isHistoricalCopy: true } as any);
+          });
+          
+          const pastPayments = payments.filter(payment => belongsToPartner(payment, p.id) && payment.createdAt < upgradedAt && !(payment as any).isHistoricalCopy);
+          pastPayments.forEach(payment => {
+            historicalPaymentCopies.push({ ...payment, id: `${payment.id}_copy`, branchId: (p as any).clubId, isHistoricalCopy: true } as any);
+          });
+        });
+        
+        payments = [...payments, ...historicalPaymentCopies];
+        consumptions = [...consumptions, ...historicalShakeCopies];
+      }
+    } catch (err) {
+      console.warn("Failed to inject historical data", err);
+    }
+
+    payments.sort((a, b) => b.createdAt - a.createdAt);
+    consumptions.sort((a, b) => b.createdAt - a.createdAt);
+
+    return { payments, consumptions, upgradedPartnerDetails };
   }
 
   static async voidConsumption(consumptionId: string, voidedBy: string): Promise<void> {

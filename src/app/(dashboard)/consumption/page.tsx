@@ -69,7 +69,10 @@ export default function ConsumptionPage() {
     // Fetch Batches
     const targetBranchId = branchId || (user as any)?.clubId || 'default-branch';
     if (targetBranchId) {
-      const batchesSnap = await getDocs(query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId), where('isActive', '==', true)));
+      const q = targetBranchId === 'default-branch'
+        ? query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId), where('isActive', '==', true))
+        : query(COLLECTIONS.BATCHES, where('branchId', 'in', ['default-branch', targetBranchId]), where('isActive', '==', true));
+      const batchesSnap = await getDocs(q);
       const bData = batchesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       bData.sort((a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0));
       setBatches(bData);
@@ -160,7 +163,7 @@ export default function ConsumptionPage() {
         const c = customers.find(x => x.id === selectedCustomerId);
         if (c && c.mobile) {
           const formattedDate = formatDate(serveDateObj.getTime());
-          const timeStr = serveDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          const batchName = selectedBatch?.name || 'Unknown Batch';
           const consumed = balance.totalShakesConsumed + serveCount;
           const remaining = balance.remainingShakes - serveCount;
           const total = consumed + remaining;
@@ -172,7 +175,7 @@ export default function ConsumptionPage() {
               name: c.name,
               mobile: c.mobile,
               date: formattedDate,
-              time: timeStr,
+              batch: batchName,
               consumed: consumed,
               total: total,
               remaining: remaining
@@ -426,10 +429,11 @@ export default function ConsumptionPage() {
               )}
 
               {/* Partner Info Banner */}
-              <div className="bg-muted p-2 sm:p-3 rounded-md flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm font-medium">
-                    Assigned Partner: <span className="text-primary">
+              <div className="bg-muted p-2 sm:p-3 rounded-md flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium flex flex-wrap items-baseline gap-x-1">
+                    <span className="shrink-0">Assigned Partner:</span> 
+                    <span className="text-primary break-words min-w-0 flex-1">
                       {canClickPartner && assignedPartnerId ? (
                         <Link href={`/partners/${assignedPartnerId}`} className="hover:underline">
                           {assignedPartnerName}
@@ -438,7 +442,7 @@ export default function ConsumptionPage() {
                         assignedPartnerName
                       )}
                     </span>
-                  </p>
+                  </div>
                   {assignedPartnerInventory !== null && (
                     <p className={`text-xs ${assignedPartnerInventory <= 10 ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
                       Partner Inventory: {assignedPartnerInventory} shakes remaining

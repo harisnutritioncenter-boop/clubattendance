@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { calculateAge, formatDate, formatDateTime } from '@/lib/utils';
 import { PartnerForm } from '@/features/partners/components/partner-form';
 import { ManageShakesModal } from '@/features/partners/components/add-shakes-modal';
+import { UpgradeToClubModal } from '@/features/partners/components/upgrade-to-club-modal';
 import { CustomerList } from '@/features/customers/components/customer-list';
 import { TrialList } from '@/features/customers/components/trial-list';
 
@@ -55,6 +56,7 @@ export default function PartnerProfilePage() {
   const [clubName, setClubName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -305,13 +307,23 @@ export default function PartnerProfilePage() {
           </Button>
           <div>
             <h1 className="text-xl sm:text-3xl font-bold tracking-tight line-clamp-1">{partner.name || partner.email}</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground capitalize">
-              {partner.role.replace('_', ' ')} {clubName && `• ${clubName}`}
+            <p className="text-xs sm:text-sm text-muted-foreground capitalize flex items-center flex-wrap gap-2">
+              <span>{partner.role.replace('_', ' ')} {clubName && `• ${clubName}`}</span>
+              {(partner as any).upgradedToClubOwnerAt && (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">
+                  Upgraded to Club Owner on {formatDate((partner as any).upgradedToClubOwnerAt)}
+                </Badge>
+              )}
             </p>
           </div>
         </div>
         {canEdit && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {currentUserRole === 'super_admin' && partner.role === 'junior_partner' && !(partner as any).upgradedToClubOwnerAt && (
+              <Button variant="default" size="sm" className="gap-2 text-xs sm:text-sm h-8 sm:h-10 px-2 sm:px-4 bg-blue-600 hover:bg-blue-700" onClick={() => setIsUpgradeOpen(true)}>
+                <Building2 className="h-3 w-3 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Upgrade to Club Owner</span><span className="sm:hidden">Upgrade</span>
+              </Button>
+            )}
             {canManageShakes && (
               <Button variant="outline" size="sm" className="gap-2 text-xs sm:text-sm h-8 sm:h-10 px-2 sm:px-4" onClick={() => setIsAssignOpen(true)}>
                 <PackagePlus className="h-3 w-3 sm:h-4 sm:w-4" /> Manage Shakes
@@ -681,6 +693,19 @@ export default function PartnerProfilePage() {
         onOpenChange={setIsAssignOpen}
         onSuccess={() => setRefreshKey(prev => prev + 1)}
       />
+      {partner.role === 'junior_partner' && (
+        <UpgradeToClubModal
+          partnerId={partner.id}
+          partnerName={partner.name || partner.email || 'Partner'}
+          currentBranchId={partner.clubId || 'default-branch'}
+          isOpen={isUpgradeOpen}
+          onOpenChange={setIsUpgradeOpen}
+          onSuccess={() => {
+            setRefreshKey(prev => prev + 1);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -121,7 +121,10 @@ export default function CustomerProfilePage() {
         // Fetch Batches
         const targetBranchId = branchId || (user as any)?.clubId || 'default-branch';
         if (targetBranchId) {
-          const batchesSnap = await getDocs(query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId), where('isActive', '==', true)));
+          const q = targetBranchId === 'default-branch'
+            ? query(COLLECTIONS.BATCHES, where('branchId', '==', targetBranchId), where('isActive', '==', true))
+            : query(COLLECTIONS.BATCHES, where('branchId', 'in', ['default-branch', targetBranchId]), where('isActive', '==', true));
+          const batchesSnap = await getDocs(q);
           const bData = batchesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           bData.sort((a: any, b: any) => (a.createdAt || 0) - (b.createdAt || 0));
           setBatches(bData);
@@ -354,7 +357,8 @@ export default function CustomerProfilePage() {
       try {
         if (customer && customer.mobile) {
           const formattedDate = formatDate(serveDateObj.getTime());
-          const timeStr = serveDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          const selectedBatch = batches.find(b => b.id === selectedBatchId);
+          const batchName = selectedBatch?.name || 'Unknown Batch';
           const remaining = cycleAssigned - cycleConsumed;
           
           await fetch('/api/whatsapp', {
@@ -364,7 +368,7 @@ export default function CustomerProfilePage() {
               name: customer.name,
               mobile: customer.mobile,
               date: formattedDate,
-              time: timeStr,
+              batch: batchName,
               consumed: cycleConsumed,
               total: cycleAssigned,
               remaining: remaining
