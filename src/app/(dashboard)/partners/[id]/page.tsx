@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getDoc, doc, getDocs, query, where } from 'firebase/firestore';
+import { getDoc, doc, getDocs, query, where, or } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import { useAuthStore } from '@/store';
 import { Partner } from '@/features/partners/types/partner.types';
@@ -110,8 +110,11 @@ export default function PartnerProfilePage() {
         const shakesSnap = await getDocs(shakesQ);
         const createdByMeShakes = shakesSnap.docs.map(d => ({ id: d.id, ...d.data() } as ShakeLedgerEntry));
 
-        // Get customers assigned to this partner
-        const custQ = query(COLLECTIONS.CUSTOMERS, where('juniorPartnerId', '==', partnerId));
+        // Get customers assigned to or created by this partner
+        const custQ = query(COLLECTIONS.CUSTOMERS, or(
+          where('juniorPartnerId', '==', partnerId),
+          where('createdBy', '==', partnerId)
+        ));
         const custSnap = await getDocs(custQ);
         const customerIds = custSnap.docs.map(d => d.id);
         
@@ -185,12 +188,40 @@ export default function PartnerProfilePage() {
           }));
         setPaymentsCollected(payData);
 
-        const mappedInvData = rawInvData.map(i => ({
-          ...i,
-          customerName: i.customerId ? (custMap[i.customerId] || 'Unknown Customer') : undefined,
-          createdByName: i.createdBy ? (userMap[i.createdBy] || 'System') : 'System'
-        }));
-        setInventoryLog(mappedInvData);
+        // Synthesize inventory logs to ensure all shakes served are accurately reflected
+        // even if they were missed in the raw inventory ledger.
+        const unifiedLogs: ExtendedPartnerInventoryEntry[] = [];
+        
+        // 1. Additions and Manual Deductions from Inventory
+        rawInvData.forEach(i => {
+           // Skip auto-deductions from shakes, we will reconstruct them from actual shakesData to ensure accuracy
+           if (i.type === 'ADDITION' || (i.type === 'DEDUCTION' && !i.customerId)) {
+             unifiedLogs.push({
+               ...i,
+               customerName: i.customerId ? (custMap[i.customerId] || 'Unknown Customer') : undefined,
+               createdByName: i.createdBy ? (userMap[i.createdBy] || 'System') : 'System'
+             });
+           }
+        });
+
+        // 2. All shakes as Deductions
+        shakesData.forEach(s => {
+           unifiedLogs.push({
+             id: s.id,
+             partnerId: partnerId,
+             type: 'DEDUCTION',
+             amount: s.shakesDeducted || 1,
+             customerId: s.customerId,
+             notes: 'Attendance Marked',
+             createdBy: s.createdBy,
+             createdAt: s.createdAt,
+             customerName: custMap[s.customerId] || 'Unknown Customer',
+             createdByName: userMap[s.createdBy] || 'System'
+           });
+        });
+
+        unifiedLogs.sort((a, b) => b.createdAt - a.createdAt);
+        setInventoryLog(unifiedLogs);
 
       } catch (err) {
         console.error(err);

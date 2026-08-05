@@ -52,13 +52,16 @@ export function JuniorDashboard() {
         const startOfDay = now.getTime();
         const endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1;
         
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
         // Fetch all branch ledgers for all-time up to today (fetch globally so we don't miss admin records)
         const reports = await LedgerService.getReportsData(null, 0, endOfDay);
         
         // Filter for this user's actions
         const myPayments = reports.payments.filter(p => (customerPartnerMap[p.customerId] || p.createdBy) === user.uid);
-        const myRevenue = myPayments.reduce((acc, p) => acc + p.amount, 0);
-        const myConversions = myPayments.filter(p => p.notes?.includes('Membership Assigned')).length;
+        const thisMonthPayments = myPayments.filter(p => p.createdAt >= startOfMonth && p.createdAt <= endOfDay);
+        const myRevenue = thisMonthPayments.reduce((acc, p) => acc + p.amount, 0);
+        const myConversions = thisMonthPayments.filter(p => p.notes?.includes('Membership Assigned')).length;
 
         const myConsumptionsToday = reports.consumptions.filter(c => 
           (customerPartnerMap[c.customerId] || c.createdBy) === user.uid && 

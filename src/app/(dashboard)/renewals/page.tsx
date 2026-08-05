@@ -35,7 +35,7 @@ export default function RenewalsPage() {
           const balance = await LedgerService.getCustomerBalance(c.id);
           const daysLeft = balance.validUntil ? Math.ceil((balance.validUntil - Date.now()) / (1000 * 60 * 60 * 24)) : null;
           
-          if (balance.isExpired || (daysLeft !== null && daysLeft <= 7)) {
+          if (balance.isExpired || balance.remainingShakes <= 7) {
             data.push({
               id: c.id,
               displayId: c.displayId || '-',
@@ -65,13 +65,13 @@ export default function RenewalsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Renewals & Expirations</h1>
-        <p className="text-muted-foreground">Customers who need to renew their memberships.</p>
+        <p className="text-muted-foreground">Customers who are running low on attendances or expired.</p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Action Required</CardTitle>
-          <CardDescription>Members expiring within 7 days or already expired.</CardDescription>
+          <CardDescription>Members with 7 or fewer attendances remaining, or already expired.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -102,11 +102,11 @@ export default function RenewalsPage() {
                     <TableCell>{c.planName}</TableCell>
                     <TableCell className="text-right font-medium">{c.remainingShakes}</TableCell>
                     <TableCell>
-                      {c.isExpired ? (
+                      {c.remainingShakes <= 0 ? (
                         <Badge variant="destructive">Expired</Badge>
                       ) : (
                         <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-                          Expiring in {c.daysLeft} days
+                          Expiring
                         </Badge>
                       )}
                     </TableCell>

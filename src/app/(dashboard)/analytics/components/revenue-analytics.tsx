@@ -63,7 +63,7 @@ export function RevenueAnalytics({
     const fetchData = async () => {
       setLoading(true);
       try {
-        const branchIdToFetch = role === 'super_admin' ? null : (activeBranchId || 'default-branch');
+        const branchIdToFetch = (role === 'super_admin' || role === 'junior_partner') ? null : (activeBranchId || 'default-branch');
         
         // Date boundaries for the selected month
         const startOfMonth = new Date(currentYear, currentMonth, 1).getTime();
@@ -76,7 +76,15 @@ export function RevenueAnalytics({
         
         if (isActive) {
           setCustomers(allCustomers);
-          setPayments(reports.payments);
+
+          let filteredPayments = reports.payments;
+          if (role === 'junior_partner' && user) {
+            const myCustomerIds = allCustomers.filter(c => c.createdBy === user.uid || c.juniorPartnerId === user.uid).map(c => c.id);
+            filteredPayments = reports.payments.filter(p => 
+              myCustomerIds.includes(p.customerId) || p.createdBy === user.uid || p.juniorPartnerId === user.uid
+            );
+          }
+          setPayments(filteredPayments);
         }
       } catch (error) {
         console.error("Error fetching revenue data:", error);

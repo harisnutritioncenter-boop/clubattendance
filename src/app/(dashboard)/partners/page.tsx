@@ -182,11 +182,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
               </Link>
             </div>
           ) : (
-            <div className="flex items-center justify-end gap-3">
-              <Link href={`/partners/${partner.id}`}>
-                <Button size="sm" variant="secondary">View Profile</Button>
-              </Link>
-            </div>
+            <span className="text-muted-foreground">-</span>
           )}
         </TableCell>
       </TableRow>

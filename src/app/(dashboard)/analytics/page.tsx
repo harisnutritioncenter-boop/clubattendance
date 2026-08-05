@@ -109,8 +109,8 @@ function AnalyticsPageContent() {
       const startDate = new Date(currentYear, currentMonth, 1).getTime();
       const endDate = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999).getTime();
 
-      // For super admin, we pass null to fetch all branches. Others use their activeBranchId
-      const branchIdToFetch = role === 'super_admin' ? null : (activeBranchId || 'default-branch');
+      // For super admin and junior partner, we pass null to fetch all branches. Others use their activeBranchId
+      const branchIdToFetch = (role === 'super_admin' || role === 'junior_partner') ? null : (activeBranchId || 'default-branch');
       
       const { consumptions: allMonthConsumptions, upgradedPartnerDetails: fetchedDetails } = await LedgerService.getReportsData(branchIdToFetch, startDate, endDate);
       setUpgradedPartnerDetails(fetchedDetails || []);
@@ -119,9 +119,9 @@ function AnalyticsPageContent() {
 
       // If junior partner, filter to ONLY show consumptions by their assigned customers
       if (role === 'junior_partner' && user) {
-        // We need to know which customers belong to this JP.
-        const myCustomers = await CustomerService.getActiveCustomers(branchIdToFetch);
-        const myCustomerIds = myCustomers.filter(c => c.createdBy === user.uid).map(c => c.id);
+        // We need to know which customers belong to this JP. Pass null to get all active customers for this JP globally.
+        const myCustomers = await CustomerService.getActiveCustomers(null);
+        const myCustomerIds = myCustomers.filter(c => c.createdBy === user.uid || c.juniorPartnerId === user.uid).map(c => c.id);
         
         filteredConsumptions = allMonthConsumptions.filter(c => 
           myCustomerIds.includes(c.customerId) || c.createdBy === user.uid || c.juniorPartnerId === user.uid

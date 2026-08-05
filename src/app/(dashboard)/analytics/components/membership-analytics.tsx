@@ -381,11 +381,9 @@ export function MembershipAnalytics({
     return (
       <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
-          {role !== 'junior_partner' && (
-            <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 shrink-0 self-start">
-              <ChevronLeftIcon className="h-4 w-4" /> Back
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={handleBack} className="gap-2 shrink-0 self-start">
+            <ChevronLeftIcon className="h-4 w-4" /> Back
+          </Button>
           <h2 className="text-xl font-bold text-foreground">
             Members • {selectedPlanId}
             {role !== 'junior_partner' && (
