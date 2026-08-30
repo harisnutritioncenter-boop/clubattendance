@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut, setPersistence, inMemoryPersistence } from 'firebase/auth';
-import { doc, setDoc, getDocs, updateDoc, addDoc } from 'firebase/firestore';
+import { doc, setDoc, getDocs, updateDoc, addDoc, query, where, or, writeBatch, arrayUnion } from 'firebase/firestore';
 import { db, COLLECTIONS } from '@/firebase';
 import { firebaseConfig } from '@/firebase/config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -71,6 +71,55 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
       await updateDoc(doc(COLLECTIONS.USERS, partner.id), {
         clubId: selectedClubId
       });
+
+      const customersQuery = query(
+        COLLECTIONS.CUSTOMERS,
+        or(
+          where('juniorPartnerId', '==', partner.id),
+          where('createdBy', '==', partner.id)
+        )
+      );
+      const customersSnapshot = await getDocs(customersQuery);
+      
+      let activeCount = 0;
+      let archivedCount = 0;
+      if (!customersSnapshot.empty) {
+        const batch = writeBatch(db);
+        customersSnapshot.forEach((docSnap) => {
+          const custData = docSnap.data();
+          batch.update(docSnap.ref, { 
+            branchId: selectedClubId,
+            pastBranchIds: arrayUnion(custData.branchId)
+          });
+          
+          // Add a Transfer log entry so it appears on the customer's calendar
+          const newLedgerRef = doc(COLLECTIONS.SHAKE_LEDGER);
+          batch.set(newLedgerRef, {
+            customerId: docSnap.id,
+            branchId: selectedClubId,
+            createdBy: user?.uid || 'system',
+            createdAt: Date.now(),
+            shakesDeducted: 0,
+            notes: `Customer transferred from previous club to new club under ${partner.name}.`,
+            isTransfer: true,
+            isArchived: false,
+            type: 'Transfer'
+          });
+
+          if (!custData.isArchived) {
+            activeCount++;
+          } else {
+            archivedCount++;
+          }
+        });
+        await batch.commit();
+      }
+
+      let msg = 'Successfully assigned club.';
+      if (activeCount > 0 || archivedCount > 0) {
+        msg = `Successfully assigned club and migrated ${activeCount} active${archivedCount > 0 ? ` and ${archivedCount} archived` : ''} customers.`;
+      }
+      toast.success(msg);
       setIsClubAssignOpen(false);
       onUpdate();
     } catch (error: any) {
@@ -105,7 +154,7 @@ function PartnerRow({ partner, clubs, onUpdate }: { partner: Partner, clubs: Clu
               <span>{clubName}</span>
               {currentUserRole === 'super_admin' && partner.role === 'junior_partner' && (
                 <Dialog open={isClubAssignOpen} onOpenChange={setIsClubAssignOpen}>
-                  <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary opacity-0 group-hover:opacity-100 transition-opacity ml-2 h-6 px-2" />}>
+                  <DialogTrigger render={<Button size="sm" variant="ghost" className="text-primary transition-opacity ml-2 h-6 px-2" />}>
                     Change
                   </DialogTrigger>
                   <DialogContent>

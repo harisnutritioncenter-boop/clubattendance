@@ -14,7 +14,7 @@ interface CustomerDetailsModalProps {
   partnerName: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onAssignPlanClick: () => void;
+  onAssignPlanClick?: () => void;
   onEditClick?: () => void;
   onCollectDebtClick?: () => void;
   onArchiveClick?: () => void;
@@ -163,14 +163,18 @@ export function CustomerDetailsModal({
             >
               <ExternalLink className="h-4 w-4 mr-2" /> View Full Profile
             </Button>
-            <Button className="w-full sm:flex-1 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={onAssignPlanClick}>
-              <ClipboardList className="h-4 w-4" /> Assign Plan
-            </Button>
+            {onAssignPlanClick && (
+              <Button className="w-full sm:flex-1 gap-2 bg-indigo-600 hover:bg-indigo-700 text-white" onClick={onAssignPlanClick}>
+                <ClipboardList className="h-4 w-4" /> Assign Plan
+              </Button>
+            )}
           </div>
           <div className="flex gap-2 w-full mt-1 sm:mt-0">
-            <Button variant="secondary" className="flex-1" onClick={onEditClick}>
-              Edit
-            </Button>
+            {onEditClick && (
+              <Button variant="secondary" className="flex-1" onClick={onEditClick}>
+                Edit
+              </Button>
+            )}
             {onArchiveClick && (
               <Button variant="destructive" className="flex-1" onClick={onArchiveClick}>
                 Archive

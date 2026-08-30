@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getDoc, doc, getDocs, query, where, or } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
-import { useAuthStore } from '@/store';
+import { useAuthStore, useBranchStore } from '@/store';
 import { Partner } from '@/features/partners/types/partner.types';
 import { PartnerInventoryService, PartnerInventoryEntry } from '@/features/partners/services/partner-inventory.service';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '@/features/ledger/types/ledger.types';
@@ -27,7 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, User, Package, CreditCard, Building2, CalendarDays, Phone, Mail, MapPin, Trash2, ChevronLeft, ChevronRight, PackagePlus, Users, UserCheck } from 'lucide-react';
+import { ArrowLeft, User, Package, CreditCard, Building2, CalendarDays, Phone, Mail, MapPin, Trash2, ChevronLeft, ChevronRight, PackagePlus, Users, UserCheck, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateAge, formatDate, formatDateTime } from '@/lib/utils';
 import { PartnerForm } from '@/features/partners/components/partner-form';
@@ -51,6 +51,7 @@ export default function PartnerProfilePage() {
   const router = useRouter();
   const partnerId = params.id as string;
   const { role: currentUserRole, user: currentUser } = useAuthStore();
+  const globalBranchId = useBranchStore(state => state.activeBranchId);
 
   const [partner, setPartner] = useState<Partner | null>(null);
   const [clubName, setClubName] = useState<string>('');
@@ -70,6 +71,7 @@ export default function PartnerProfilePage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDateLogs, setSelectedDateLogs] = useState<ExtendedPartnerInventoryEntry[]>([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [isTransferredOut, setIsTransferredOut] = useState(false);
   
   // Filters
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -137,8 +139,7 @@ export default function PartnerProfilePage() {
         const allShakesMap = new Map<string, ShakeLedgerEntry>();
         [...createdByMeShakes, ...customerShakesData].forEach(s => allShakesMap.set(s.id, s));
         
-        const shakesData = Array.from(allShakesMap.values()).sort((a, b) => b.createdAt - a.createdAt);
-        setShakesServed(shakesData);
+        let finalShakesData = Array.from(allShakesMap.values()).sort((a, b) => b.createdAt - a.createdAt);
 
         // 5. Fetch Payments Collected
         // Include payments created by this partner, AND payments from this partner's customers
@@ -179,49 +180,41 @@ export default function PartnerProfilePage() {
           custMap[d.id] = c.displayId ? `${c.displayId} (${c.name})` : c.name;
         });
         
-        const payData = Array.from(allPayMap.values())
+        let finalPayData = Array.from(allPayMap.values())
           .sort((a, b) => b.createdAt - a.createdAt)
           .map(p => ({
             ...p,
             customerName: custMap[p.customerId] || 'Unknown Customer',
             markedByName: userMap[p.createdBy] || 'Admin'
           }));
-        setPaymentsCollected(payData);
 
-        // Synthesize inventory logs to ensure all shakes served are accurately reflected
-        // even if they were missed in the raw inventory ledger.
-        const unifiedLogs: ExtendedPartnerInventoryEntry[] = [];
+        // Use raw inventory ledger as the source of truth to avoid retroactively charging JPs for transferred customers
+        let finalUnifiedLogs: ExtendedPartnerInventoryEntry[] = rawInvData.map(i => ({
+          ...i,
+          customerName: i.customerId ? (custMap[i.customerId] || 'Unknown Customer') : undefined,
+          createdByName: i.createdBy ? (userMap[i.createdBy] || 'System') : 'System'
+        }));
+        finalUnifiedLogs.sort((a, b) => b.createdAt - a.createdAt);
         
-        // 1. Additions and Manual Deductions from Inventory
-        rawInvData.forEach(i => {
-           // Skip auto-deductions from shakes, we will reconstruct them from actual shakesData to ensure accuracy
-           if (i.type === 'ADDITION' || (i.type === 'DEDUCTION' && !i.customerId)) {
-             unifiedLogs.push({
-               ...i,
-               customerName: i.customerId ? (custMap[i.customerId] || 'Unknown Customer') : undefined,
-               createdByName: i.createdBy ? (userMap[i.createdBy] || 'System') : 'System'
-             });
-           }
-        });
+        let isTransferred = false;
+        if (currentUserRole === 'club_owner' && partnerData.clubId !== globalBranchId) {
+          isTransferred = true;
+          setIsTransferredOut(true);
+          
+          const transferOutLogs = customerShakesData.filter(s => s.isTransfer && s.branchId === partnerData.clubId);
+          // If transfer logs exist, find the earliest one. Otherwise use current time (fallback)
+          const transferDate = transferOutLogs.length > 0 ? Math.min(...transferOutLogs.map(s => s.createdAt)) : Date.now();
+          
+          finalShakesData = finalShakesData.filter(s => s.createdAt <= transferDate);
+          finalPayData = finalPayData.filter(p => p.createdAt <= transferDate);
+          finalUnifiedLogs = finalUnifiedLogs.filter(i => i.createdAt <= transferDate);
+        } else {
+          setIsTransferredOut(false);
+        }
 
-        // 2. All shakes as Deductions
-        shakesData.forEach(s => {
-           unifiedLogs.push({
-             id: s.id,
-             partnerId: partnerId,
-             type: 'DEDUCTION',
-             amount: s.shakesDeducted || 1,
-             customerId: s.customerId,
-             notes: 'Attendance Marked',
-             createdBy: s.createdBy,
-             createdAt: s.createdAt,
-             customerName: custMap[s.customerId] || 'Unknown Customer',
-             createdByName: userMap[s.createdBy] || 'System'
-           });
-        });
-
-        unifiedLogs.sort((a, b) => b.createdAt - a.createdAt);
-        setInventoryLog(unifiedLogs);
+        setShakesServed(finalShakesData);
+        setPaymentsCollected(finalPayData);
+        setInventoryLog(finalUnifiedLogs);
 
       } catch (err) {
         console.error(err);
@@ -271,8 +264,8 @@ export default function PartnerProfilePage() {
   const totalRevenueCollected = paymentsCollected.reduce((acc, curr) => acc + curr.amount, 0);
 
   // Authorization to edit
-  const canEdit = currentUserRole === 'super_admin' || currentUserRole === 'club_owner' || currentUser?.uid === partnerId;
-  const canManageShakes = currentUserRole === 'super_admin' || currentUserRole === 'club_owner';
+  const canEdit = !isTransferredOut && (currentUserRole === 'super_admin' || currentUserRole === 'club_owner' || currentUser?.uid === partnerId);
+  const canManageShakes = !isTransferredOut && (currentUserRole === 'super_admin' || currentUserRole === 'club_owner');
 
   // Calendar Logic
   const currentYear = currentDate.getFullYear();
@@ -364,6 +357,15 @@ export default function PartnerProfilePage() {
           </div>
         )}
       </div>
+
+      {isTransferredOut && (
+        <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 p-4 rounded-md border border-amber-200 dark:border-amber-800 flex items-center justify-center gap-2 mb-6 shadow-sm">
+          <Info className="h-5 w-5" />
+          <p className="font-medium">
+            This Junior Partner was transferred to another club. You are viewing their historical data from when they belonged to this club.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         <Card className="bg-primary/5 flex flex-col justify-between">

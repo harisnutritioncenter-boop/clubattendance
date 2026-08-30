@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import { ContactActions } from '@/components/ui/contact-actions';
+import { useAnalyticsUrlState } from '@/hooks/useAnalyticsUrlState';
 
 interface TrialsAnalyticsProps {
   currentMonth: number;
@@ -17,7 +18,6 @@ interface TrialsAnalyticsProps {
   user: any;
   activeBranchId: string | null;
   clubs: Record<string, string>;
-  onDrillDownStateChange: (isDrilledDown: boolean) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
   upgradedPartnerDetails?: any[];
@@ -32,7 +32,6 @@ export function TrialsAnalytics({
   activeBranchId,
   clubs,
   partners,
-  onDrillDownStateChange,
   onPrevMonth,
   onNextMonth,
   upgradedPartnerDetails = []
@@ -40,25 +39,7 @@ export function TrialsAnalytics({
   const [trials, setTrials] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Drill down states
-  const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
-  const [clubViewMode, setClubViewMode] = useState<'partner' | 'customer'>('partner');
-
-  const isDrilledDown = 
-    role === 'super_admin' ? (selectedClubId !== null || selectedPartnerId !== null) :
-    role === 'club_owner' ? (selectedPartnerId !== null) :
-    false;
-
-  useEffect(() => {
-    onDrillDownStateChange(isDrilledDown);
-  }, [isDrilledDown, onDrillDownStateChange]);
-
-  useEffect(() => {
-    // Reset drill-down when month changes
-    if (role !== 'club_owner' && role !== 'junior_partner') setSelectedClubId(null);
-    if (role !== 'junior_partner') setSelectedPartnerId(null);
-  }, [currentMonth, currentYear, role]);
+  const { selectedClubId, setSelectedClubId, selectedPartnerId, setSelectedPartnerId, clubViewMode, setClubViewMode } = useAnalyticsUrlState();
 
   useEffect(() => {
     let isActive = true;
@@ -275,7 +256,11 @@ export function TrialsAnalytics({
                       {pId === 'unassigned' ? (
                         <span className="font-semibold text-base sm:text-lg text-foreground line-clamp-2 leading-tight">Unassigned / Admin</span>
                       ) : partners[pId] ? (
-                        <Link href={`/partners/${pId}`} className="font-semibold text-base sm:text-lg hover:text-primary transition-colors hover:underline text-foreground line-clamp-2 leading-tight">
+                        <Link 
+                          href={`/partners/${pId}`} 
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-semibold text-base sm:text-lg hover:text-primary transition-colors hover:underline text-foreground relative z-10 line-clamp-2 leading-tight"
+                        >
                           {partners[pId]}
                         </Link>
                       ) : (

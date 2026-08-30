@@ -37,4 +37,5 @@ export interface ShakeLedgerEntry {
   batchId?: string | null;
   batchName?: string | null;
   isArchived: boolean;
+  isTransfer?: boolean;
 }

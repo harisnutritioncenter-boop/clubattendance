@@ -7,6 +7,7 @@ import { CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, BarChart, Users, Building, ChevronRightIcon, Activity, ArrowLeft, Trash2 } from 'lucide-react';
 import { useAuthStore, useBranchStore } from '@/store';
+import { useAnalyticsUrlState } from '@/hooks/useAnalyticsUrlState';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { CustomerService } from '@/features/customers/services/customer.service';
 import { getDocs } from 'firebase/firestore';
@@ -27,22 +28,22 @@ const monthNames = ["January", "February", "March", "April", "May", "June",
 function AnalyticsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
   const selectedDateStr = searchParams.get('date');
-  const selectedClubId = searchParams.get('clubId');
-  const selectedPartnerId = searchParams.get('partnerId');
-
+  
   const role = useAuthStore((state) => state.role);
   const user = useAuthStore((state) => state.user);
   const activeBranchId = useBranchStore((state) => state.activeBranchId);
   
-  // If we have a date in the URL, parse its month/year. Otherwise use current date.
-  const initialDate = selectedDateStr ? new Date(selectedDateStr) : new Date();
-  
-  const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth());
-  const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
-  const [activeTab, setActiveTab] = useState("attendance");
-  const [isTrialsDrilledDown, setIsTrialsDrilledDown] = useState(false);
+  const { 
+    currentMonth, currentYear, activeTab, 
+    setMonthYear, setActiveTab, clubViewMode, setClubViewMode,
+    selectedClubId, selectedPartnerId, selectedPlanId
+  } = useAnalyticsUrlState();
+
+  const isGlobalDrilledDown = selectedDateStr || 
+    (role === 'super_admin' ? (selectedClubId !== null || selectedPartnerId !== null || selectedPlanId !== null) :
+     role === 'club_owner' ? (selectedPartnerId !== null) :
+     false);
   
   const [consumptions, setConsumptions] = useState<ShakeLedgerEntry[]>([]);
   const [upgradedPartnerDetails, setUpgradedPartnerDetails] = useState<any[]>([]);
@@ -52,7 +53,6 @@ function AnalyticsPageContent() {
   const [clubs, setClubs] = useState<Record<string, string>>({});
   const [partners, setPartners] = useState<Record<string, string>>({});
   const [customers, setCustomers] = useState<Record<string, {name: string, assignedTo: string, branchId: string}>>({});
-  const [clubViewMode, setClubViewMode] = useState<'partner' | 'customer'>('partner');
 
   useEffect(() => {
     if (role) {
@@ -138,10 +138,9 @@ function AnalyticsPageContent() {
 
   const prevMonth = () => {
     if (currentMonth === 0) {
-      setCurrentMonth(11);
-      setCurrentYear(currentYear - 1);
+      setMonthYear(11, currentYear - 1);
     } else {
-      setCurrentMonth(currentMonth - 1);
+      setMonthYear(currentMonth - 1, currentYear);
     }
     // Also clear selection if moving months
     if (selectedDateStr) router.push('/analytics');
@@ -149,10 +148,9 @@ function AnalyticsPageContent() {
 
   const nextMonth = () => {
     if (currentMonth === 11) {
-      setCurrentMonth(0);
-      setCurrentYear(currentYear + 1);
+      setMonthYear(0, currentYear + 1);
     } else {
-      setCurrentMonth(currentMonth + 1);
+      setMonthYear(currentMonth + 1, currentYear);
     }
     // Also clear selection if moving months
     if (selectedDateStr) router.push('/analytics');
@@ -549,10 +547,11 @@ function AnalyticsPageContent() {
   };
 
 
+
   return (
     <div className="p-4 sm:p-6 pb-24 md:pb-6 max-w-6xl mx-auto min-h-screen">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className={`w-full overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent mb-4 sm:mb-6 ${(selectedDateStr || isTrialsDrilledDown) ? 'hidden' : 'block'}`}>
+        <div className={`w-full overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent mb-4 sm:mb-6 ${isGlobalDrilledDown ? 'hidden' : 'block'}`}>
           <TabsList className="inline-flex w-max min-w-full h-11 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground">
             <TabsTrigger value="attendance" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><CalendarDays className="h-4 w-4" /> Attendance</TabsTrigger>
             <TabsTrigger value="trials" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><Activity className="h-4 w-4" /> Trials</TabsTrigger>
@@ -641,7 +640,6 @@ function AnalyticsPageContent() {
             clubs={clubs}
             partners={partners}
             upgradedPartnerDetails={upgradedPartnerDetails}
-            onDrillDownStateChange={setIsTrialsDrilledDown}
             onPrevMonth={prevMonth}
             onNextMonth={nextMonth}
           />

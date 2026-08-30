@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAnalyticsUrlState } from '@/hooks/useAnalyticsUrlState';
 
 type AugmentedCustomer = Customer & { 
   membershipStatus?: CustomerMembershipStatus & { planAssignedAt?: number };
@@ -48,18 +49,11 @@ export function MembershipAnalytics({
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [customers, setCustomers] = useState<AugmentedCustomer[]>([]);
   
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-  const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  const { selectedPlanId, setSelectedPlanId, selectedClubId, setSelectedClubId, selectedPartnerId, setSelectedPartnerId } = useAnalyticsUrlState();
 
   const monthName = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
 
-  // Reset drill-down when month changes
-  useEffect(() => {
-    setSelectedPlanId(null);
-    if (role !== 'club_owner' && role !== 'junior_partner') setSelectedClubId(null);
-    if (role !== 'junior_partner') setSelectedPartnerId(null);
-  }, [currentMonth, currentYear, role]);
+
 
   // Auto-skip levels based on role
   useEffect(() => {

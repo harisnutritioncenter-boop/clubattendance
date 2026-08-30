@@ -20,6 +20,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -93,7 +94,7 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
         }
 
         // 2. Fetch Customers
-        let data = await CustomerService.getActiveCustomers(activeBranchId);
+        let data = await CustomerService.getActiveCustomers(activeBranchId, false, true);
         // Filter out trial customers
         data = data.filter(c => c.isTrial !== true);
         
@@ -429,7 +430,16 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
                     <TableCell className="font-medium text-xs text-muted-foreground whitespace-nowrap">
                       {customer.displayId || '-'}
                     </TableCell>
-                    <TableCell className="font-semibold">{customer.name}</TableCell>
+                    <TableCell className="font-semibold">
+                      <div className="flex items-center gap-2">
+                        {customer.name}
+                        {activeBranchId && customer.branchId !== activeBranchId && activeBranchId !== 'default-branch' && activeBranchId !== 'all' && (
+                          <Badge variant="secondary" className="text-[10px] bg-muted/50 text-muted-foreground whitespace-nowrap pointer-events-none">
+                            Transferred Out
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div>
                         <span className="font-medium text-xs sm:text-sm">{customer.mobile}</span>
@@ -484,20 +494,25 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
       </div>
       
       {/* Global Modals */}
-      <CustomerDetailsModal
-        isOpen={detailsModalOpen}
-        onOpenChange={setDetailsModalOpen}
-        customer={selectedCustomer}
-        balance={selectedCustomer ? balances[selectedCustomer.id] : null}
-        partnerName={selectedCustomer ? partners[selectedCustomer.juniorPartnerId || ''] : ''}
-        onAssignPlanClick={() => openAssignPlan(selectedCustomer!)}
-        onCollectDebtClick={() => openCollectDebt(selectedCustomer!)}
-        onArchiveClick={() => promptArchiveCustomer(selectedCustomer!)}
-        onEditClick={() => {
-          setDetailsModalOpen(false);
-          setTimeout(() => setEditModalOpen(true), 150);
-        }}
-      />
+      {(() => {
+        const isTransferredOutSelected = selectedCustomer && activeBranchId && selectedCustomer.branchId !== activeBranchId && activeBranchId !== 'default-branch' && activeBranchId !== 'all';
+        return (
+          <CustomerDetailsModal
+            isOpen={detailsModalOpen}
+            onOpenChange={setDetailsModalOpen}
+            customer={selectedCustomer}
+            balance={selectedCustomer ? balances[selectedCustomer.id] : null}
+            partnerName={selectedCustomer ? partners[selectedCustomer.juniorPartnerId || ''] : ''}
+            onAssignPlanClick={isTransferredOutSelected ? undefined : () => openAssignPlan(selectedCustomer!)}
+            onCollectDebtClick={isTransferredOutSelected ? undefined : () => openCollectDebt(selectedCustomer!)}
+            onArchiveClick={isTransferredOutSelected ? undefined : () => promptArchiveCustomer(selectedCustomer!)}
+            onEditClick={isTransferredOutSelected ? undefined : () => {
+              setDetailsModalOpen(false);
+              setTimeout(() => setEditModalOpen(true), 150);
+            }}
+          />
+        );
+      })()}
 
       {selectedCustomer && (
         <AssignMembershipModal 

@@ -9,6 +9,7 @@ import { Building, Users, ChevronRightIcon, ChevronLeftIcon, User } from 'lucide
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { useAnalyticsUrlState } from '@/hooks/useAnalyticsUrlState';
 
 interface RevenueAnalyticsProps {
   currentMonth: number;
@@ -37,16 +38,11 @@ export function RevenueAnalytics({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
   
-  const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
-  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  const { selectedClubId, setSelectedClubId, selectedPartnerId, setSelectedPartnerId } = useAnalyticsUrlState();
 
   const monthName = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
 
-  // Reset drill-down when month changes
-  useEffect(() => {
-    if (role !== 'club_owner' && role !== 'junior_partner') setSelectedClubId(null);
-    if (role !== 'junior_partner') setSelectedPartnerId(null);
-  }, [currentMonth, currentYear, role]);
+
 
   // Auto-skip levels based on role
   useEffect(() => {

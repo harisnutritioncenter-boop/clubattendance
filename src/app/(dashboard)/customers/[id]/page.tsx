@@ -112,9 +112,14 @@ export default function CustomerProfilePage() {
         const [pSnap, sSnap] = await Promise.all([getDocs(paymentsQ), getDocs(shakesQ)]);
         
         const pRecords = pSnap.docs.map(d => ({ id: d.id, ...d.data(), type: d.data().type || 'Membership' } as LedgerEntry));
-        const sRecords = sSnap.docs.map(d => ({ id: d.id, ...d.data(), type: 'Consumption' } as LedgerEntry));
+        const sRecords = sSnap.docs.map(d => ({ id: d.id, ...d.data(), type: d.data().isTransfer ? 'Transfer' : 'Consumption' } as LedgerEntry));
         
-        const records = [...pRecords, ...sRecords].sort((a, b) => a.createdAt - b.createdAt); // oldest first
+        let records = [...pRecords, ...sRecords].sort((a, b) => a.createdAt - b.createdAt); // oldest first
+        
+        // Club owners should only see ledger entries stamped with their club ID (or legacy entries without a branchId)
+        if (authRole === 'club_owner') {
+          records = records.filter(r => r.branchId === branchId || !r.branchId);
+        }
         
         setLedger(records);
 
@@ -191,6 +196,7 @@ export default function CustomerProfilePage() {
       } else if (entry.type === 'Consumption') {
         cycleConsumed += (entry as ShakeLedgerEntry).shakesDeducted || 0;
       }
+      // Note: 'Transfer' entries are intentionally ignored in cycle calculations as they have 0 deduction
     }
     return { cycleAssigned, cycleConsumed };
   };
@@ -205,7 +211,7 @@ export default function CustomerProfilePage() {
     const todaysLogs: LedgerEntry[] = [];
     for (const entry of ledger) {
       if (entry.createdAt > endOfDay) break;
-      if (entry.createdAt >= startOfDay && entry.type === 'Consumption') {
+      if (entry.createdAt >= startOfDay && (entry.type === 'Consumption' || entry.type === 'Transfer')) {
         todaysLogs.push(entry);
       }
     }
@@ -402,8 +408,20 @@ export default function CustomerProfilePage() {
     return <div className="p-8 text-center">Customer not found.</div>;
   }
 
+  const isTransferredOut = customer && branchId && customer.branchId !== branchId && branchId !== 'default-branch' && branchId !== 'all';
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
+      {isTransferredOut && (
+        <div className="bg-amber-500/15 border border-amber-500/20 text-amber-600 dark:text-amber-400 p-4 rounded-lg flex items-start gap-3">
+          <Info className="h-5 w-5 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold">Transferred Customer</h3>
+            <p className="text-sm mt-1">This customer has been transferred to another club. You are viewing historical data only, and you cannot modify their profile, mark attendance, or collect payments.</p>
+          </div>
+        </div>
+      )}
+      
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
@@ -421,22 +439,24 @@ export default function CustomerProfilePage() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button 
-            className="bg-green-600 hover:bg-green-700 text-white" 
-            onClick={() => {
-              setServeCount(1);
-              setAttendanceSuccess(false);
-              setIsMarkAttendanceOpen(true);
-            }}
-          >
-            <Check className="mr-2 h-4 w-4" /> Mark Attendance
-          </Button>
-          <Button variant="outline" onClick={() => setEditModalOpen(true)}>Edit Profile</Button>
-          {status && status.remainingBalance > 0 && (
-             <Button variant="destructive" onClick={() => setCollectModalOpen(true)}>Collect Debt (₹{status.remainingBalance})</Button>
-          )}
-        </div>
+        {!isTransferredOut && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white" 
+              onClick={() => {
+                setServeCount(1);
+                setAttendanceSuccess(false);
+                setIsMarkAttendanceOpen(true);
+              }}
+            >
+              <Check className="mr-2 h-4 w-4" /> Mark Attendance
+            </Button>
+            <Button variant="outline" onClick={() => setEditModalOpen(true)}>Edit Profile</Button>
+            {status && status.remainingBalance > 0 && (
+               <Button variant="destructive" onClick={() => setCollectModalOpen(true)}>Collect Debt (₹{status.remainingBalance})</Button>
+            )}
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="calendar" className="w-full">
@@ -573,12 +593,19 @@ export default function CustomerProfilePage() {
                     >
                       <div className="flex flex-col sm:flex-row justify-between items-start mb-1 sm:mb-2 gap-1">
                         <span className={`font-semibold text-sm sm:text-lg ${isToday ? 'text-primary' : ''}`}>{day}</span>
-                        {hasConsumedToday && (
-                          <Badge variant="default" className="h-4 sm:h-5 px-1 sm:px-1.5 rounded-full bg-green-500 hover:bg-green-600 text-[10px] sm:text-xs">
-                            <Check className="h-3 w-3 mr-1" />
-                            {todaysLogs.reduce((acc, log) => acc + ((log as ShakeLedgerEntry).shakesDeducted || 1), 0)}
-                          </Badge>
-                        )}
+                        <div className="flex flex-col gap-1 items-end">
+                          {hasConsumedToday && (
+                            <Badge variant="default" className="h-4 sm:h-5 px-1 sm:px-1.5 rounded-full bg-green-500 hover:bg-green-600 text-[10px] sm:text-xs">
+                              <Check className="h-3 w-3 mr-1" />
+                              {todaysLogs.filter(l => l.type === 'Consumption').reduce((acc, log) => acc + ((log as ShakeLedgerEntry).shakesDeducted || 1), 0)}
+                            </Badge>
+                          )}
+                          {todaysLogs.some(l => l.type === 'Transfer') && (
+                            <Badge variant="default" className="h-4 sm:h-5 px-1 sm:px-1.5 rounded-full bg-blue-500 hover:bg-blue-600 text-[10px] sm:text-xs" title="Club Transfer">
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Transfer
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       
                       {showRunningTotal && (
@@ -682,17 +709,23 @@ export default function CustomerProfilePage() {
                   <div>
                     <span className="font-semibold flex items-center gap-2">
                       {new Date(sLog.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      {customer?.isTrial && <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-[10px] h-4 px-1 py-0">Trial</Badge>}
+                      {customer?.isTrial && !sLog.isTransfer && <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-[10px] h-4 px-1 py-0">Trial</Badge>}
                     </span>
                     <span className="text-xs text-primary font-medium block mt-1">Consumed By: {consumerName}</span>
                     {sLog.batchName && <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium block">Batch: {sLog.batchName}</span>}
                     <span className="text-xs text-muted-foreground font-medium block">Marked By: {markedByName}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">-{sLog.shakesDeducted || 1} Attendance(s)</Badge>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRevert(sLog)} title="Revert Consumption">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {sLog.isTransfer ? (
+                      <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">Transferred</Badge>
+                    ) : (
+                      <Badge variant="outline">-{sLog.shakesDeducted || 1} Attendance(s)</Badge>
+                    )}
+                    {!sLog.isTransfer && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRevert(sLog)} title="Revert Consumption">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <div className="text-sm text-muted-foreground mt-2">

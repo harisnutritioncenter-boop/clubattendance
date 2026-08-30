@@ -18,6 +18,7 @@ export interface Customer {
   locality?: string;
   purpose: CustomerPurpose[];
   otherPurposeDescription?: string;
+  pastBranchIds?: string[];
   notes?: string;
   isTrial?: boolean;
   wasTrial?: boolean;

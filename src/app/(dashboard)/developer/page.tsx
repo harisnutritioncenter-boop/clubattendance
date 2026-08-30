@@ -45,7 +45,7 @@ export default function DeveloperPortalPage() {
     fetchConfig();
   }, []);
 
-  if (role !== 'developer') {
+  if (role !== 'developer' && role !== 'super_admin') {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <p className="text-muted-foreground">You do not have access to this portal.</p>
@@ -183,9 +183,64 @@ export default function DeveloperPortalPage() {
     }
   };
 
+  const fixJPDataMigration = async () => {
+    setMigrating(true);
+    try {
+      // 1. Find all Junior Partners
+      const usersSnap = await getDocs(query(COLLECTIONS.USERS, where('role', '==', 'junior_partner')));
+      const jps = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      let customersFixed = 0;
+      let attendancesFixed = 0;
+
+      for (const jp of jps) {
+        if (!(jp as any).clubId) continue;
+        const jpClubId = (jp as any).clubId;
+        
+        // 2. Fix their customers
+        const cSnap = await getDocs(query(COLLECTIONS.CUSTOMERS, where('juniorPartnerId', '==', jp.id)));
+        for (const cDoc of cSnap.docs) {
+          const cust = cDoc.data();
+          if (cust.branchId !== jpClubId) {
+            await updateDoc(doc(COLLECTIONS.CUSTOMERS, cDoc.id), { branchId: jpClubId });
+            customersFixed++;
+          }
+        }
+
+        // 3. Fix attendances marked by this JP (createdBy == jp.id) where branchId is NOT their current clubId
+        // The user specifically mentioned the transfer happened on August 7th, 2026.
+        // We will forcefully fix any attendance marked by this JP after August 7th, 2026 (00:00:00).
+        const aug7Time = new Date('2026-08-07T00:00:00').getTime();
+        
+        // Fetch ALL attendances marked by this JP
+        const aQ = query(
+          COLLECTIONS.SHAKE_LEDGER,
+          where('createdBy', '==', jp.id)
+        );
+        const aSnap = await getDocs(aQ);
+        for (const aDoc of aSnap.docs) {
+          const att = aDoc.data();
+          if (att.createdAt >= aug7Time && att.branchId !== jpClubId) {
+            await updateDoc(doc(COLLECTIONS.SHAKE_LEDGER, aDoc.id), { branchId: jpClubId });
+            attendancesFixed++;
+          }
+        }
+      }
+
+      toast.success(`Migration Complete! Fixed ${customersFixed} customers and ${attendancesFixed} attendances.`);
+    } catch (error) {
+      console.error(error);
+      toast.error('Migration failed');
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   if (loading) {
     return <div>Loading developer portal...</div>;
   }
+
+
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -280,7 +335,7 @@ export default function DeveloperPortalPage() {
               Run structural updates on the database.
             </p>
           </div>
-          <div className="mt-6">
+          <div className="mt-6 space-y-2">
             <Button 
               variant="outline" 
               className="w-full"
@@ -291,11 +346,19 @@ export default function DeveloperPortalPage() {
             </Button>
             <Button 
               variant="outline" 
-              className="w-full mt-2"
+              className="w-full"
               onClick={handleFixTrialConversions}
               disabled={migrating}
             >
               {migrating ? 'Fixing...' : 'Fix Voided Trial Conversions'}
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={fixJPDataMigration}
+              disabled={migrating}
+            >
+              {migrating ? 'Fixing...' : 'Fix Transferred JP Attendances & Customers'}
             </Button>
           </div>
         </div>

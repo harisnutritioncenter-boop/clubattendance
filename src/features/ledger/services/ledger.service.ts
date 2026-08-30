@@ -268,7 +268,7 @@ export class LedgerService {
     type UnifiedLedgerEntry = (PaymentLedgerEntry | ShakeLedgerEntry) & { type?: string };
     const allEntries: UnifiedLedgerEntry[] = [
       ...payments.map(p => ({ ...p, type: p.type || (p.planName ? 'Membership' : 'Debt Collection') } as UnifiedLedgerEntry)),
-      ...consumptions.map(c => ({ ...c, type: 'Consumption' } as UnifiedLedgerEntry))
+      ...consumptions.map(c => ({ ...c, type: c.isTransfer ? 'Transfer' : 'Consumption' } as UnifiedLedgerEntry))
     ];
     allEntries.sort((a, b) => a.createdAt - b.createdAt);
 

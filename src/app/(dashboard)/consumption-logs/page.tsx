@@ -88,7 +88,9 @@ export default function ConsumptionLogsPage() {
         userRoleMap[d.id] = d.data().role;
       });
 
-      let formattedLogs = consumptions.map(c => {
+      let formattedLogs = consumptions
+        .filter(c => !c.isTransfer)
+        .map(c => {
         const partnerId = c.createdBy;
         const assignedJpId = customerPartnerMap[c.customerId];
         return {
