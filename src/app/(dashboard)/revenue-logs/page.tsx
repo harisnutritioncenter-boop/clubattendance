@@ -98,7 +98,7 @@ export default function RevenueLogsPage() {
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(p => (customerPartnerMap[p.customerId] || p.createdBy) === user.uid);
+        formattedLogs = formattedLogs.filter(p => (customerPartnerMap[p.customerId] || p.createdBy) === user.uid && !(p as any).isHistoricalCopy);
       }
 
       setLogs(formattedLogs);

@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, query, where, getDocs, writeBatch, arrayUnion } from 'firebase/firestore';
 import { db } from '@/firebase/firestore';
 import { COLLECTIONS } from '@/firebase/collections';
 
@@ -10,16 +10,40 @@ export class PartnerService {
     if (updates.clubId) {
       const pSnap = await getDoc(docRef);
       if (pSnap.exists() && pSnap.data().clubId !== updates.clubId) {
-        // Club is changing! Update all customers assigned to this JP
+        const oldClubId = pSnap.data().clubId;
+        const newClubId = updates.clubId;
+        const transferredAt = Date.now();
+
+        // 1. Log transfer history inside the updates payload
+        updates.transferHistory = arrayUnion({
+          oldClubId,
+          newClubId,
+          transferredAt
+        });
+
+        // 2. Club is changing! Update all customers assigned to this JP
         const q = query(COLLECTIONS.CUSTOMERS, where('juniorPartnerId', '==', partnerId));
         const cSnap = await getDocs(q);
         
         if (!cSnap.empty) {
-          const batch = writeBatch(db);
-          cSnap.docs.forEach(c => {
-            batch.update(doc(COLLECTIONS.CUSTOMERS, c.id), { branchId: updates.clubId });
-          });
-          await batch.commit();
+          const docs = cSnap.docs;
+          const chunkSize = 500; // Firestore limit is 500 writes per batch
+          
+          for (let i = 0; i < docs.length; i += chunkSize) {
+            const chunk = docs.slice(i, i + chunkSize);
+            const batch = writeBatch(db);
+            
+            chunk.forEach(c => {
+              const currentPastBranchIds = c.data().pastBranchIds || [];
+              const updatedPastBranchIds = [...new Set([...currentPastBranchIds, oldClubId])];
+              batch.update(doc(COLLECTIONS.CUSTOMERS, c.id), { 
+                branchId: newClubId,
+                pastBranchIds: updatedPastBranchIds
+              });
+            });
+            
+            await batch.commit();
+          }
         }
       }
     }

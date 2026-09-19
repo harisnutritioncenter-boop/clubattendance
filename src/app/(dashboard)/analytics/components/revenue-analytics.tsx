@@ -38,7 +38,16 @@ export function RevenueAnalytics({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [payments, setPayments] = useState<PaymentLedgerEntry[]>([]);
   
-  const { selectedClubId, setSelectedClubId, selectedPartnerId, setSelectedPartnerId } = useAnalyticsUrlState();
+  const { 
+    selectedClubId: urlSelectedClubId, 
+    setSelectedClubId, 
+    selectedPartnerId: urlSelectedPartnerId, 
+    setSelectedPartnerId, 
+    setClubAndPartnerId 
+  } = useAnalyticsUrlState();
+
+  const selectedClubId = (role === 'club_owner' || role === 'junior_partner') ? (activeBranchId || urlSelectedClubId) : urlSelectedClubId;
+  const selectedPartnerId = role === 'junior_partner' ? (user?.uid || urlSelectedPartnerId) : urlSelectedPartnerId;
 
   const monthName = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
 
@@ -49,8 +58,7 @@ export function RevenueAnalytics({
     if (role === 'club_owner' && activeBranchId) {
       setSelectedClubId(activeBranchId);
     } else if (role === 'junior_partner' && activeBranchId && user) {
-      setSelectedClubId(activeBranchId);
-      setSelectedPartnerId(user.uid);
+      setClubAndPartnerId(activeBranchId, user.uid);
     }
   }, [role, activeBranchId, user]);
 
@@ -66,7 +74,7 @@ export function RevenueAnalytics({
         const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999).getTime();
         
         const [allCustomers, reports] = await Promise.all([
-          CustomerService.getActiveCustomers(branchIdToFetch),
+          CustomerService.getActiveCustomers(branchIdToFetch, false, true),
           LedgerService.getReportsData(branchIdToFetch, startOfMonth, endOfMonth)
         ]);
         
@@ -77,7 +85,7 @@ export function RevenueAnalytics({
           if (role === 'junior_partner' && user) {
             const myCustomerIds = allCustomers.filter(c => c.createdBy === user.uid || c.juniorPartnerId === user.uid).map(c => c.id);
             filteredPayments = reports.payments.filter(p => 
-              myCustomerIds.includes(p.customerId) || p.createdBy === user.uid || p.juniorPartnerId === user.uid
+              (myCustomerIds.includes(p.customerId) || p.createdBy === user.uid || p.juniorPartnerId === user.uid) && !(p as any).isHistoricalCopy
             );
           }
           setPayments(filteredPayments);
@@ -302,7 +310,7 @@ export function RevenueAnalytics({
       const bId = getEffectiveBranchId(p, customer);
       const pId = getEffectivePartnerId(p, customer);
       
-      if (bId === selectedClubId && pId === selectedPartnerId) {
+      if ((role === 'junior_partner' || bId === selectedClubId) && pId === selectedPartnerId) {
         const cId = p.customerId;
         if (!customerTotals[cId]) {
           customerTotals[cId] = { 

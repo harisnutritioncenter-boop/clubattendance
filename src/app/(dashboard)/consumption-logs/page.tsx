@@ -107,7 +107,7 @@ export default function ConsumptionLogsPage() {
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(c => (customerPartnerMap[c.customerId] || c.createdBy) === user.uid);
+        formattedLogs = formattedLogs.filter(c => (customerPartnerMap[c.customerId] || c.createdBy) === user.uid && !(c as any).isHistoricalCopy);
       }
 
       setLogs(formattedLogs);

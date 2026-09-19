@@ -39,7 +39,18 @@ export function TrialsAnalytics({
   const [trials, setTrials] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { selectedClubId, setSelectedClubId, selectedPartnerId, setSelectedPartnerId, clubViewMode, setClubViewMode } = useAnalyticsUrlState();
+  const { 
+    selectedClubId: urlSelectedClubId, 
+    setSelectedClubId, 
+    selectedPartnerId: urlSelectedPartnerId, 
+    setSelectedPartnerId, 
+    clubViewMode, 
+    setClubViewMode, 
+    setClubAndPartnerId 
+  } = useAnalyticsUrlState();
+
+  const selectedClubId = (role === 'club_owner' || role === 'junior_partner') ? (activeBranchId || urlSelectedClubId) : urlSelectedClubId;
+  const selectedPartnerId = role === 'junior_partner' ? (user?.uid || urlSelectedPartnerId) : urlSelectedPartnerId;
 
   useEffect(() => {
     let isActive = true;
@@ -47,7 +58,8 @@ export function TrialsAnalytics({
       setLoading(true);
       try {
         const branchIdToFetch = role === 'super_admin' ? null : (activeBranchId || 'default-branch');
-        const allCustomers = await CustomerService.getActiveCustomers(branchIdToFetch);
+        // Fetch including past customers for historical analysis
+        const allCustomers = await CustomerService.getActiveCustomers(branchIdToFetch, false, true);
         
         // Filter trials created in the selected month/year
         let filteredTrials = allCustomers.filter(c => {
@@ -60,8 +72,10 @@ export function TrialsAnalytics({
         // If junior partner, filter to ONLY show their trials
         if (role === 'junior_partner' && user) {
           filteredTrials = filteredTrials.filter(c => c.juniorPartnerId === user.uid || c.createdBy === user.uid);
-        } else if (role === 'super_admin' && upgradedPartnerDetails.length > 0) {
-          // Apply historical duality for Super Admins
+        }
+        
+        if (upgradedPartnerDetails.length > 0) {
+          // Apply historical duality
           const historicalTrials: Customer[] = [];
           filteredTrials.forEach(c => {
              const partnerDetail = upgradedPartnerDetails.find(p => p.id === (c.juniorPartnerId || c.createdBy));
@@ -101,8 +115,7 @@ export function TrialsAnalytics({
     if (role === 'club_owner' && activeBranchId) {
       setSelectedClubId(activeBranchId);
     } else if (role === 'junior_partner' && activeBranchId && user) {
-      setSelectedClubId(activeBranchId);
-      setSelectedPartnerId(user.uid);
+      setClubAndPartnerId(activeBranchId, user.uid);
     }
   }, [role, activeBranchId, user]);
 
@@ -314,7 +327,7 @@ export function TrialsAnalytics({
           <div className="flex flex-col">
             <h2 className="text-xl font-bold text-foreground">Trials Records</h2>
             <span className="text-sm text-muted-foreground font-medium">
-              {partners[selectedPartnerId || ''] || 'Unassigned'} • {clubs[selectedClubId || ''] || 'Unknown Club'} • {monthName} {currentYear}
+              {partners[selectedPartnerId || ''] || 'Unassigned'} • {clubs[selectedClubId || ''] || (role === 'junior_partner' && selectedClubId === activeBranchId ? 'My Club' : 'Unknown Club')} • {monthName} {currentYear}
             </span>
           </div>
         </div>

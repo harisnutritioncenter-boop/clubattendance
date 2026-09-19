@@ -14,8 +14,28 @@ export class LedgerService {
   static async addPayment(
     data: Omit<PaymentLedgerEntry, 'id' | 'createdAt' | 'isArchived'> & { createdAt?: number }
   ): Promise<string> {
+    
+    // Ensure Admin payments route to the customer's actual club!
+    let verifiedBranchId = data.branchId;
+    try {
+      if (data.customerId) {
+        const customerDoc = await getDoc(doc(COLLECTIONS.CUSTOMERS, data.customerId));
+        if (customerDoc.exists() && customerDoc.data().branchId) {
+          verifiedBranchId = customerDoc.data().branchId;
+        }
+      }
+      
+      const userDoc = await getDoc(doc(COLLECTIONS.USERS, data.createdBy));
+      if (userDoc.exists() && userDoc.data().role === 'junior_partner') {
+         verifiedBranchId = userDoc.data().clubId || verifiedBranchId;
+      }
+    } catch (e) {
+      console.warn("Failed to verify user/customer branchId for payment", e);
+    }
+
     const newDoc = await addDoc(COLLECTIONS.PAYMENT_LEDGER, cleanPayload({
       ...data,
+      branchId: verifiedBranchId,
       createdAt: data.createdAt || Date.now(),
       isArchived: false,
     }));
@@ -66,9 +86,24 @@ export class LedgerService {
     const consumer = await CustomerService.getCustomer(actualConsumerId);
     const consumedByName = consumer?.name || 'Unknown Consumer';
 
+    // Ensure Admin shakes route to the customer's actual club!
+    let verifiedBranchId = data.branchId;
+    try {
+      if (consumer?.branchId) {
+        verifiedBranchId = consumer.branchId;
+      }
+      
+      const userDoc = await getDoc(doc(COLLECTIONS.USERS, data.createdBy));
+      if (userDoc.exists() && userDoc.data().role === 'junior_partner') {
+         verifiedBranchId = userDoc.data().clubId || verifiedBranchId;
+      }
+    } catch (e) {
+      console.warn("Failed to verify user/customer branchId for shake", e);
+    }
+
     const newDoc = await addDoc(COLLECTIONS.SHAKE_LEDGER, cleanPayload({
       ...data,
-      branchId: data.branchId === 'default-branch' ? (consumer?.branchId || data.branchId) : data.branchId,
+      branchId: verifiedBranchId,
       customerId: chargeToCustomerId,
       consumedBy: consumedByName,
       juniorPartnerId: consumer?.juniorPartnerId || null,
@@ -439,10 +474,11 @@ export class LedgerService {
         consumptions = [...consumptions, ...mergedConsumptions];
       }
       
-      // For Super Admins: clone historical entries for display in the new clubs
-      if (authState.role === 'super_admin') {
-        const usersSnap = await getDocs(query(COLLECTIONS.USERS, where('role', '==', 'club_owner')));
-        const upgradedPartners = usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => (p as any).previousRole === 'junior_partner' && (p as any).upgradedToClubOwnerAt);
+      // For all roles: clone historical entries for display in the correct clubs
+      if (['super_admin', 'junior_partner', 'club_owner'].includes(authState.role as string)) {
+        const usersSnap = await getDocs(query(COLLECTIONS.USERS));
+        const partnersWithHistory = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(p => ((p as any).transferHistory && (p as any).transferHistory.length > 0) || (p as any).upgradedToClubOwnerAt);
         
         const customersSnap = await getDocs(query(COLLECTIONS.CUSTOMERS));
         const customersData = customersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -458,50 +494,79 @@ export class LedgerService {
         const historicalShakeCopies: ShakeLedgerEntry[] = [];
         const historicalPaymentCopies: PaymentLedgerEntry[] = [];
         
-        upgradedPartners.forEach(p => {
-          const upgradedAt = (p as any).upgradedToClubOwnerAt;
-          const newClubId = (p as any).clubId;
-          
-          // Determine the OLD club ID for this partner by looking at a valid past shake or payment from the ENTIRE history
+        partnersWithHistory.forEach(p => {
           const allConsumptions = consumptionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ShakeLedgerEntry));
           const allPayments = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentLedgerEntry));
           
-          const oldClubShake = allConsumptions.find(c => belongsToPartner(c, p.id) && c.createdAt < upgradedAt && c.branchId && c.branchId !== 'default-branch' && c.branchId !== newClubId);
-          const oldClubPayment = allPayments.find(pay => belongsToPartner(pay, p.id) && pay.createdAt < upgradedAt && pay.branchId && pay.branchId !== 'default-branch' && pay.branchId !== newClubId);
-          const oldClubId = oldClubShake ? oldClubShake.branchId : (oldClubPayment ? oldClubPayment.branchId : undefined);
-          
-          upgradedPartnerDetails.push({
-            id: p.id,
-            upgradedAt,
-            newClubId,
-            oldClubId
-          });
-          
-          // Pre-fix any missing branchIds on past records so the UI doesn't map them to the customer's new club
-          consumptions.forEach(c => {
-            if (belongsToPartner(c, p.id) && c.createdAt < upgradedAt) {
-              if (!c.branchId || c.branchId === 'default-branch') {
-                c.branchId = oldClubId || 'orphan-historical';
+          // Process formal transferHistory array
+          if ((p as any).transferHistory && (p as any).transferHistory.length > 0) {
+            (p as any).transferHistory.forEach((transfer: any) => {
+              const { oldClubId, newClubId, transferredAt } = transfer;
+              upgradedPartnerDetails.push({ id: p.id, upgradedAt: transferredAt, newClubId, oldClubId });
+              
+              // Only create historical copies for Super Admin view or if the JP themselves is viewing it
+              const shouldCreateCopies = authState.role === 'super_admin' || authState.user?.uid === p.id;
+              
+              if (shouldCreateCopies) {
+                // Fix old records and copy them
+                consumptions.forEach(c => {
+                  if (belongsToPartner(c, p.id) && c.createdAt < transferredAt && (!c.branchId || c.branchId === 'default-branch')) {
+                    c.branchId = oldClubId || 'orphan-historical';
+                  }
+                });
+                payments.forEach(payment => {
+                  if (belongsToPartner(payment, p.id) && payment.createdAt < transferredAt && (!payment.branchId || payment.branchId === 'default-branch' || payment.branchId === 'unassigned')) {
+                    payment.branchId = oldClubId || 'orphan-historical';
+                  }
+                });
+                
+                const pastShakes = consumptions.filter(c => belongsToPartner(c, p.id) && c.createdAt < transferredAt && c.createdAt >= (transfer.previousTransferredAt || 0) && !(c as any).isHistoricalCopy);
+                pastShakes.forEach(shake => {
+                  historicalShakeCopies.push({ ...shake, id: `${shake.id}_copy`, branchId: newClubId, isHistoricalCopy: true } as any);
+                });
+                
+                const pastPayments = payments.filter(payment => belongsToPartner(payment, p.id) && payment.createdAt < transferredAt && payment.createdAt >= (transfer.previousTransferredAt || 0) && !(payment as any).isHistoricalCopy);
+                pastPayments.forEach(payment => {
+                  historicalPaymentCopies.push({ ...payment, id: `${payment.id}_copy`, branchId: newClubId, isHistoricalCopy: true } as any);
+                });
               }
-            }
-          });
-          payments.forEach(payment => {
-            if (belongsToPartner(payment, p.id) && payment.createdAt < upgradedAt) {
-              if (!payment.branchId || payment.branchId === 'default-branch' || payment.branchId === 'unassigned') {
-                payment.branchId = oldClubId || 'orphan-historical';
-              }
-            }
-          });
-          
-          const pastShakes = consumptions.filter(c => belongsToPartner(c, p.id) && c.createdAt < upgradedAt && !(c as any).isHistoricalCopy);
-          pastShakes.forEach(shake => {
-            historicalShakeCopies.push({ ...shake, id: `${shake.id}_copy`, branchId: (p as any).clubId, isHistoricalCopy: true } as any);
-          });
-          
-          const pastPayments = payments.filter(payment => belongsToPartner(payment, p.id) && payment.createdAt < upgradedAt && !(payment as any).isHistoricalCopy);
-          pastPayments.forEach(payment => {
-            historicalPaymentCopies.push({ ...payment, id: `${payment.id}_copy`, branchId: (p as any).clubId, isHistoricalCopy: true } as any);
-          });
+            });
+          } else if ((p as any).upgradedToClubOwnerAt) {
+             // Fallback for legacy upgradedToClubOwnerAt
+             const upgradedAt = (p as any).upgradedToClubOwnerAt;
+             const newClubId = (p as any).clubId;
+             const oldClubShake = allConsumptions.find(c => belongsToPartner(c, p.id) && c.createdAt < upgradedAt && c.branchId && c.branchId !== 'default-branch' && c.branchId !== newClubId);
+             const oldClubPayment = allPayments.find(pay => belongsToPartner(pay, p.id) && pay.createdAt < upgradedAt && pay.branchId && pay.branchId !== 'default-branch' && pay.branchId !== newClubId);
+             const oldClubId = oldClubShake ? oldClubShake.branchId : (oldClubPayment ? oldClubPayment.branchId : undefined);
+             
+             upgradedPartnerDetails.push({ id: p.id, upgradedAt, newClubId, oldClubId });
+             
+             // Pre-fix any missing branchIds on past records so the UI doesn't map them to the customer's new club
+             consumptions.forEach(c => {
+               if (belongsToPartner(c, p.id) && c.createdAt < upgradedAt) {
+                 if (!c.branchId || c.branchId === 'default-branch') {
+                   c.branchId = oldClubId || 'orphan-historical';
+                 }
+               }
+             });
+             payments.forEach(payment => {
+               if (belongsToPartner(payment, p.id) && payment.createdAt < upgradedAt) {
+                 if (!payment.branchId || payment.branchId === 'default-branch' || payment.branchId === 'unassigned') {
+                   payment.branchId = oldClubId || 'orphan-historical';
+                 }
+               }
+             });
+             
+             const pastShakes = consumptions.filter(c => belongsToPartner(c, p.id) && c.createdAt < upgradedAt && !(c as any).isHistoricalCopy);
+             pastShakes.forEach(shake => {
+               historicalShakeCopies.push({ ...shake, id: `${shake.id}_copy`, branchId: (p as any).clubId, isHistoricalCopy: true } as any);
+             });
+             
+             const pastPayments = payments.filter(payment => belongsToPartner(payment, p.id) && payment.createdAt < upgradedAt && !(payment as any).isHistoricalCopy);
+             pastPayments.forEach(payment => {
+               historicalPaymentCopies.push({ ...payment, id: `${payment.id}_copy`, branchId: (p as any).clubId, isHistoricalCopy: true } as any);
+             });
+          }
         });
         
         payments = [...payments, ...historicalPaymentCopies];

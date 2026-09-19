@@ -61,7 +61,7 @@ export default function ReportsPage() {
   const buildMappings = async () => {
     const bId = branchId || 'default-branch';
     const [customersSnap, usersSnap] = await Promise.all([
-      CustomerService.getActiveCustomers(bId),
+      CustomerService.getActiveCustomers(bId, false, true),
       getDocs(COLLECTIONS.USERS)
     ]);
 

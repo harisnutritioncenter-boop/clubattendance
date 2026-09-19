@@ -35,7 +35,7 @@ export function useAnalyticsUrlState() {
   }, [searchParams, pathname, router]);
 
   const setMonthYear = (month: number, year: number) => {
-    updateUrl({ month: month.toString(), year: year.toString(), clubId: null, partnerId: null, planId: null });
+    updateUrl({ month: month.toString(), year: year.toString() });
   };
 
   const setActiveTab = (tab: string) => {
@@ -58,6 +58,10 @@ export function useAnalyticsUrlState() {
     updateUrl({ view: mode });
   };
 
+  const setClubAndPartnerId = (cId: string | null, pId: string | null) => {
+    updateUrl({ clubId: cId, partnerId: pId });
+  };
+
   const resetDrillDowns = () => {
     updateUrl({ clubId: null, partnerId: null, planId: null });
   };
@@ -76,6 +80,8 @@ export function useAnalyticsUrlState() {
     setSelectedPartnerId,
     setSelectedPlanId,
     setClubViewMode,
+    setClubAndPartnerId,
     resetDrillDowns,
+    updateUrl,
   };
 }

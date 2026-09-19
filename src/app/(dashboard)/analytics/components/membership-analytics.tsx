@@ -49,7 +49,18 @@ export function MembershipAnalytics({
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [customers, setCustomers] = useState<AugmentedCustomer[]>([]);
   
-  const { selectedPlanId, setSelectedPlanId, selectedClubId, setSelectedClubId, selectedPartnerId, setSelectedPartnerId } = useAnalyticsUrlState();
+  const { 
+    selectedPlanId, 
+    setSelectedPlanId, 
+    selectedClubId: urlSelectedClubId, 
+    setSelectedClubId, 
+    selectedPartnerId: urlSelectedPartnerId, 
+    setSelectedPartnerId, 
+    setClubAndPartnerId 
+  } = useAnalyticsUrlState();
+
+  const selectedClubId = (role === 'club_owner' || role === 'junior_partner') ? (activeBranchId || urlSelectedClubId) : urlSelectedClubId;
+  const selectedPartnerId = role === 'junior_partner' ? (user?.uid || urlSelectedPartnerId) : urlSelectedPartnerId;
 
   const monthName = new Date(currentYear, currentMonth).toLocaleString('default', { month: 'long' });
 
@@ -57,13 +68,24 @@ export function MembershipAnalytics({
 
   // Auto-skip levels based on role
   useEffect(() => {
-    if (role === 'club_owner' && activeBranchId) {
+    if (role === 'club_owner' && activeBranchId && !selectedClubId) {
       setSelectedClubId(activeBranchId);
     } else if (role === 'junior_partner' && activeBranchId && user) {
-      setSelectedClubId(activeBranchId);
-      setSelectedPartnerId(user.uid);
+      if (selectedPlanId && customers.length > 0 && !selectedClubId) {
+        const activeClubs = new Set<string>();
+        customers.forEach(c => {
+          if (c.membershipStatus && !c.membershipStatus.isExpired && c.membershipStatus.latestPlanName === selectedPlanId) {
+            activeClubs.add(c.branchId || 'unknown');
+          }
+        });
+        if (activeClubs.size <= 1) {
+          setClubAndPartnerId(activeClubs.size === 1 ? Array.from(activeClubs)[0] : activeBranchId, user.uid);
+        }
+      } else if (!selectedPlanId && (!selectedClubId || !selectedPartnerId)) {
+        setClubAndPartnerId(activeBranchId, user.uid);
+      }
     }
-  }, [role, activeBranchId, user]);
+  }, [role, activeBranchId, user, selectedPlanId, selectedClubId, selectedPartnerId, customers, setClubAndPartnerId]);
 
   useEffect(() => {
     let isActive = true;
@@ -74,7 +96,7 @@ export function MembershipAnalytics({
         
         const [fetchedPlans, allCustomers] = await Promise.all([
           MembershipService.getActivePlans(),
-          CustomerService.getActiveCustomers(branchIdToFetch)
+          CustomerService.getActiveCustomers(branchIdToFetch, false, true) // Fetch including past customers
         ]);
 
         const balancePromises = allCustomers.map(async (c) => {
@@ -100,8 +122,10 @@ export function MembershipAnalytics({
         // If junior partner, filter to ONLY show their customers
         if (role === 'junior_partner' && user) {
           validCustomers = validCustomers.filter(c => c.juniorPartnerId === user.uid || c.createdBy === user.uid);
-        } else if (role === 'super_admin' && upgradedPartnerDetails.length > 0) {
-          // Apply historical duality for Super Admins
+        }
+        
+        if (upgradedPartnerDetails.length > 0) {
+          // Apply historical duality
           const historicalCustomers: AugmentedCustomer[] = [];
           validCustomers.forEach(c => {
              const partnerDetail = upgradedPartnerDetails.find(p => p.id === (c.juniorPartnerId || c.createdBy));
@@ -178,8 +202,15 @@ export function MembershipAnalytics({
                 <div 
                   key={plan.id} 
                   onClick={() => setSelectedPlanId(plan.name)}
-                  className="flex flex-col p-5 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4"
+                  className="flex flex-col p-5 rounded-xl border bg-card hover:border-primary/50 cursor-pointer transition-all shadow-sm gap-4 relative overflow-hidden"
                 >
+                  {plan.isTrialPlan && (
+                    <div className="absolute top-0 right-0">
+                      <Badge className="rounded-tl-none rounded-br-none rounded-tr-lg rounded-bl-lg bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-orange-500/20 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5">
+                        Trial
+                      </Badge>
+                    </div>
+                  )}
                   <div className="flex items-center gap-4">
                     <div className="p-3 bg-purple-500/10 rounded-lg text-purple-600 dark:text-purple-400 shrink-0">
                       <CreditCard className="h-6 w-6" />

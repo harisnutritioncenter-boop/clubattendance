@@ -37,7 +37,7 @@ function AnalyticsPageContent() {
   const { 
     currentMonth, currentYear, activeTab, 
     setMonthYear, setActiveTab, clubViewMode, setClubViewMode,
-    selectedClubId, selectedPartnerId, selectedPlanId
+    selectedClubId, selectedPartnerId, selectedPlanId, updateUrl
   } = useAnalyticsUrlState();
 
   const isGlobalDrilledDown = selectedDateStr || 
@@ -88,7 +88,7 @@ function AnalyticsPageContent() {
     // 3. Fetch Customers based on role
     try {
       const branchIdToFetch = role === 'super_admin' ? null : (activeBranchId || 'default-branch');
-      const customersSnap = await CustomerService.getActiveCustomers(branchIdToFetch);
+      const customersSnap = await CustomerService.getActiveCustomers(branchIdToFetch, false, true);
       const custMap: Record<string, {name: string, assignedTo: string, branchId: string}> = {};
       customersSnap.forEach(c => { 
         custMap[c.id] = { 
@@ -115,15 +115,15 @@ function AnalyticsPageContent() {
       const { consumptions: allMonthConsumptions, upgradedPartnerDetails: fetchedDetails } = await LedgerService.getReportsData(branchIdToFetch, startDate, endDate);
       setUpgradedPartnerDetails(fetchedDetails || []);
       
-      let filteredConsumptions = allMonthConsumptions;
+      let filteredConsumptions = allMonthConsumptions.filter((c: any) => !c.isTransfer);
 
-      // If junior partner, filter to ONLY show consumptions by their assigned customers
+      // If junior partner, filter to ONLY show consumptions by their assigned customers just for fun
       if (role === 'junior_partner' && user) {
         // We need to know which customers belong to this JP. Pass null to get all active customers for this JP globally.
         const myCustomers = await CustomerService.getActiveCustomers(null);
         const myCustomerIds = myCustomers.filter(c => c.createdBy === user.uid || c.juniorPartnerId === user.uid).map(c => c.id);
         
-        filteredConsumptions = allMonthConsumptions.filter(c => 
+        filteredConsumptions = filteredConsumptions.filter((c: any) => 
           myCustomerIds.includes(c.customerId) || c.createdBy === user.uid || c.juniorPartnerId === user.uid
         );
       }
@@ -137,23 +137,27 @@ function AnalyticsPageContent() {
   };
 
   const prevMonth = () => {
-    if (currentMonth === 0) {
-      setMonthYear(11, currentYear - 1);
-    } else {
-      setMonthYear(currentMonth - 1, currentYear);
-    }
-    // Also clear selection if moving months
-    if (selectedDateStr) router.push('/analytics');
+    let m = currentMonth - 1;
+    let y = currentYear;
+    if (m === -1) { m = 11; y = currentYear - 1; }
+    
+    updateUrl({ 
+      month: m.toString(), 
+      year: y.toString(), 
+      ...(selectedDateStr ? { date: null } : {}) 
+    });
   };
 
   const nextMonth = () => {
-    if (currentMonth === 11) {
-      setMonthYear(0, currentYear + 1);
-    } else {
-      setMonthYear(currentMonth + 1, currentYear);
-    }
-    // Also clear selection if moving months
-    if (selectedDateStr) router.push('/analytics');
+    let m = currentMonth + 1;
+    let y = currentYear;
+    if (m === 12) { m = 0; y = currentYear + 1; }
+    
+    updateUrl({ 
+      month: m.toString(), 
+      year: y.toString(), 
+      ...(selectedDateStr ? { date: null } : {}) 
+    });
   };
 
   const handleRevert = async (e: React.MouseEvent, c: ShakeLedgerEntry) => {
@@ -180,7 +184,7 @@ function AnalyticsPageContent() {
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
 
-  const totalMonthShakes = consumptions.reduce((sum, c) => (role === 'super_admin' && (c as any).isHistoricalCopy) ? sum : sum + (c.shakesDeducted || 1), 0);
+  const totalMonthShakes = consumptions.reduce((sum, c) => ((role === 'super_admin' || role === 'junior_partner') && (c as any).isHistoricalCopy) ? sum : sum + (c.shakesDeducted || 1), 0);
 
   // Helper to get consumptions for a specific day
   const getConsumptionsForDay = (dayOrDateStr: number | string) => {
@@ -456,7 +460,7 @@ function AnalyticsPageContent() {
 
   const renderCustomerLevel = (dayConsumptions: ShakeLedgerEntry[]) => {
     // Filter to selected club and selected partner
-    const clubConsumptions = dayConsumptions.filter(c => c.branchId === selectedClubId);
+    const clubConsumptions = role === 'junior_partner' ? dayConsumptions.filter(c => !(c as any).isHistoricalCopy) : dayConsumptions.filter(c => c.branchId === selectedClubId);
     const partnerConsumptions = clubConsumptions.filter(c => {
       const pId = c.juniorPartnerId || customers[c.customerId]?.assignedTo || c.createdBy || 'unassigned';
       return pId === selectedPartnerId;
@@ -595,7 +599,7 @@ function AnalyticsPageContent() {
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
               const dayConsumptions = getConsumptionsForDay(day);
-              const totalShakes = dayConsumptions.reduce((sum, c) => (role === 'super_admin' && (c as any).isHistoricalCopy) ? sum : sum + (c.shakesDeducted || 1), 0);
+              const totalShakes = dayConsumptions.reduce((sum, c) => ((role === 'super_admin' || role === 'junior_partner') && (c as any).isHistoricalCopy) ? sum : sum + (c.shakesDeducted || 1), 0);
               const hasAttendance = totalShakes > 0;
               const isToday = new Date().toDateString() === new Date(currentYear, currentMonth, day).toDateString();
 
