@@ -29,7 +29,7 @@ const baseSchema = z.object({
   // Payment fields (shared)
   amountPaid: z.coerce.number().min(0, 'Cannot be negative').optional(),
   customPlanPrice: z.coerce.number().min(0, 'Cannot be negative').optional(),
-  paymentMethod: z.enum(['Cash', 'Card', 'UPI', 'Bank Transfer', 'Due']).optional(),
+  paymentMethod: z.enum(['Cash', 'Card', 'UPI', 'Bank Transfer']).optional(),
   paymentDate: z.string().optional(),
 });
 

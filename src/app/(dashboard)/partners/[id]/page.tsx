@@ -33,6 +33,7 @@ import { calculateAge, formatDate, formatDateTime } from '@/lib/utils';
 import { PartnerForm } from '@/features/partners/components/partner-form';
 import { ManageShakesModal } from '@/features/partners/components/add-shakes-modal';
 import { UpgradeToClubModal } from '@/features/partners/components/upgrade-to-club-modal';
+import { DebtTransferWarningModal } from '@/features/partners/components/debt-transfer-warning-modal';
 import { CustomerList } from '@/features/customers/components/customer-list';
 import { TrialList } from '@/features/customers/components/trial-list';
 
@@ -58,6 +59,7 @@ export default function PartnerProfilePage() {
   const [loading, setLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
+  const [isDebtWarningOpen, setIsDebtWarningOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -66,6 +68,7 @@ export default function PartnerProfilePage() {
   const [shakesServed, setShakesServed] = useState<ShakeLedgerEntry[]>([]);
   const [paymentsCollected, setPaymentsCollected] = useState<ExtendedPaymentLedgerEntry[]>([]);
   const [logToRevert, setLogToRevert] = useState<ExtendedPaymentLedgerEntry | null>(null);
+  const [ledgerToVoid, setLedgerToVoid] = useState<ExtendedPartnerInventoryEntry | null>(null);
   
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -185,14 +188,14 @@ export default function PartnerProfilePage() {
           .map(p => ({
             ...p,
             customerName: custMap[p.customerId] || 'Unknown Customer',
-            markedByName: userMap[p.createdBy] || 'Admin'
+            markedByName: userMap[p.createdBy] || (p.createdBy === currentUser?.uid ? (currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Admin') : 'Admin')
           }));
 
         // Use raw inventory ledger as the source of truth to avoid retroactively charging JPs for transferred customers
         let finalUnifiedLogs: ExtendedPartnerInventoryEntry[] = rawInvData.map(i => ({
           ...i,
           customerName: i.customerId ? (custMap[i.customerId] || 'Unknown Customer') : undefined,
-          createdByName: i.createdBy ? (userMap[i.createdBy] || 'System') : 'System'
+          createdByName: i.createdBy ? (userMap[i.createdBy] || (i.createdBy === currentUser?.uid ? (currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Admin') : 'Admin')) : 'System'
         }));
         finalUnifiedLogs.sort((a, b) => b.createdAt - a.createdAt);
         
@@ -263,6 +266,16 @@ export default function PartnerProfilePage() {
 
   const totalRevenueCollected = paymentsCollected.reduce((acc, curr) => acc + curr.amount, 0);
 
+  // Partner Ledger Metrics
+  const partnerLedgerEntries = inventoryLog.filter(l => l.type === 'ADDITION' || l.type === 'DEBT_COLLECTION');
+  const totalPartnerCost = partnerLedgerEntries.reduce((acc, curr) => acc + (curr.totalCost || 0), 0);
+  const totalPartnerPaid = partnerLedgerEntries.reduce((acc, curr) => acc + (curr.amountPaid || 0), 0);
+  const partnerDueBalance = totalPartnerCost - totalPartnerPaid;
+  const localPartnerDueBalance = partnerLedgerEntries
+    .filter(l => l.clubId === partner.clubId)
+    .reduce((acc, curr) => acc + (curr.totalCost || 0) - (curr.amountPaid || 0), 0);
+  const partnerTotalAdditions = inventoryLog.filter(l => l.type === 'ADDITION').reduce((acc, curr) => acc + curr.amount, 0);
+
   // Authorization to edit
   const canEdit = !isTransferredOut && (currentUserRole === 'super_admin' || currentUserRole === 'club_owner' || currentUser?.uid === partnerId);
   const canManageShakes = !isTransferredOut && (currentUserRole === 'super_admin' || currentUserRole === 'club_owner');
@@ -322,6 +335,20 @@ export default function PartnerProfilePage() {
     }
   };
 
+  const confirmVoidLedger = async () => {
+    if (!ledgerToVoid || !ledgerToVoid.id) return;
+    try {
+      await PartnerInventoryService.voidInventoryEntry(ledgerToVoid.id, currentUser?.uid || 'system');
+      toast.success('Ledger entry voided successfully');
+      const newLogs = inventoryLog.filter(l => l.id !== ledgerToVoid.id);
+      setInventoryLog(newLogs);
+      setLedgerToVoid(null);
+      setRefreshKey(prev => prev + 1);
+    } catch (error: any) {
+      toast.error('Failed to void ledger entry: ' + error.message);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -344,7 +371,13 @@ export default function PartnerProfilePage() {
         {canEdit && (
           <div className="flex flex-wrap items-center gap-2">
             {currentUserRole === 'super_admin' && partner.role === 'junior_partner' && !(partner as any).upgradedToClubOwnerAt && (
-              <Button variant="default" size="sm" className="gap-2 text-xs sm:text-sm h-8 sm:h-10 px-2 sm:px-4 bg-blue-600 hover:bg-blue-700" onClick={() => setIsUpgradeOpen(true)}>
+              <Button variant="default" size="sm" className="gap-2 text-xs sm:text-sm h-8 sm:h-10 px-2 sm:px-4 bg-blue-600 hover:bg-blue-700" onClick={() => {
+                if (localPartnerDueBalance > 0) {
+                  setIsDebtWarningOpen(true);
+                } else {
+                  setIsUpgradeOpen(true);
+                }
+              }}>
                 <Building2 className="h-3 w-3 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Upgrade to Club Owner</span><span className="sm:hidden">Upgrade</span>
               </Button>
             )}
@@ -431,6 +464,7 @@ export default function PartnerProfilePage() {
           <TabsList className="inline-flex w-max min-w-full h-11 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground">
             <TabsTrigger value="profile" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><User className="h-4 w-4" /> Profile Details</TabsTrigger>
             <TabsTrigger value="inventory" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><Package className="h-4 w-4" /> Inventory Activity</TabsTrigger>
+            <TabsTrigger value="ledger" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><CreditCard className="h-4 w-4" /> Partner Ledger</TabsTrigger>
             <TabsTrigger value="payments" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><CreditCard className="h-4 w-4" /> Collections</TabsTrigger>
             <TabsTrigger value="customers" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><Users className="h-4 w-4" /> Customers</TabsTrigger>
             <TabsTrigger value="trials" className="gap-2 px-4 whitespace-nowrap text-xs sm:text-sm"><UserCheck className="h-4 w-4" /> Trials</TabsTrigger>
@@ -564,6 +598,99 @@ export default function PartnerProfilePage() {
                     </div>
                   );
                 })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ledger" className="mt-0">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-4">
+            <Card className="flex flex-col justify-between">
+              <CardHeader className="p-4 pb-0 sm:p-6 sm:pb-2">
+                <CardDescription className="text-xs sm:text-sm">Total Shakes Purchased</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 sm:p-6 sm:pt-4">
+                <div className="text-2xl sm:text-3xl font-bold">{partnerTotalAdditions}</div>
+              </CardContent>
+            </Card>
+            <Card className="flex flex-col justify-between">
+              <CardHeader className="p-4 pb-0 sm:p-6 sm:pb-2">
+                <CardDescription className="text-xs sm:text-sm">Total Cost</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 sm:p-6 sm:pt-4">
+                <div className="text-2xl sm:text-3xl font-bold">₹{totalPartnerCost.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+            <Card className="flex flex-col justify-between">
+              <CardHeader className="p-4 pb-0 sm:p-6 sm:pb-2">
+                <CardDescription className="text-xs sm:text-sm">Total Paid</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 sm:p-6 sm:pt-4">
+                <div className="text-2xl sm:text-3xl font-bold text-green-600">₹{totalPartnerPaid.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+            <Card className="flex flex-col justify-between bg-destructive/5 border-destructive/20">
+              <CardHeader className="p-4 pb-0 sm:p-6 sm:pb-2">
+                <CardDescription className="text-xs sm:text-sm font-medium text-destructive">Total Due Balance</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 pt-2 sm:p-6 sm:pt-4">
+                <div className="text-2xl sm:text-3xl font-bold text-destructive">₹{partnerDueBalance.toLocaleString()}</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Partner Ledger History</CardTitle>
+              <CardDescription>Financial transactions for inventory shakes additions and debt collections.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border max-h-[500px] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50 text-left font-medium text-muted-foreground sticky top-0">
+                      <th className="p-4">Date</th>
+                      <th className="p-4">Transaction Type</th>
+                      <th className="p-4">Shakes Added</th>
+                      <th className="p-4 text-right">Total Cost</th>
+                      <th className="p-4 text-right">Amount Paid</th>
+                      <th className="p-4 text-right">Method</th>
+                      <th className="p-4">Marked By</th>
+                      {canEdit && <th className="p-4 w-[50px]"></th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {partnerLedgerEntries.map((entry, index) => (
+                      <tr key={index} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="p-4 whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
+                        <td className="p-4">
+                          <Badge variant={entry.type === 'ADDITION' ? 'default' : 'secondary'}>
+                            {entry.type.replace('_', ' ')}
+                          </Badge>
+                        </td>
+                        <td className="p-4 font-bold">{entry.amount > 0 ? `+${entry.amount}` : '-'}</td>
+                        <td className="p-4 text-right">₹{entry.totalCost?.toLocaleString() || 0}</td>
+                        <td className="p-4 text-right font-bold text-green-600">
+                          ₹{entry.amountPaid?.toLocaleString() || 0}
+                        </td>
+                        <td className="p-4 text-right">{entry.paymentMethod || '-'}</td>
+                        <td className="p-4 text-muted-foreground">{entry.createdByName || '-'}</td>
+                        {canEdit && (
+                          <td className="p-4">
+                            <Button variant="ghost" size="icon" onClick={() => setLedgerToVoid(entry)} className="text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                    {partnerLedgerEntries.length === 0 && (
+                      <tr>
+                        <td colSpan={canEdit ? 8 : 7} className="p-8 text-center text-muted-foreground">No ledger transactions found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -719,6 +846,28 @@ export default function PartnerProfilePage() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!ledgerToVoid} onOpenChange={(open) => !open && setLedgerToVoid(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Void Ledger Entry
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-base">
+              Are you sure you want to void this <span className="font-semibold text-foreground">{ledgerToVoid?.type.replace('_', ' ')}</span> transaction?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted/50 p-3 rounded-md text-sm my-2">
+            This will logically undo the transaction.
+            {ledgerToVoid?.type === 'ADDITION' && ' The shakes added will be deducted from their balance, and the financial due will be reverted.'}
+            {ledgerToVoid?.type === 'DEBT_COLLECTION' && ' The collected amount will be added back to their pending debt balance.'}
+          </div>
+          <DialogFooter className="sm:justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setLedgerToVoid(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmVoidLedger}>Yes, Void Entry</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ManageShakesModal 
         partnerId={partner.id}
         partnerName={partner.name || partner.email || 'Partner'}
@@ -737,6 +886,18 @@ export default function PartnerProfilePage() {
             setRefreshKey(prev => prev + 1);
             router.refresh();
           }}
+        />
+      )}
+      {localPartnerDueBalance > 0 && (
+        <DebtTransferWarningModal
+          isOpen={isDebtWarningOpen}
+          onOpenChange={setIsDebtWarningOpen}
+          partnerId={partner.id}
+          clubId={partner.clubId}
+          partnerName={partner.name || partner.email || 'Partner'}
+          amountDue={localPartnerDueBalance}
+          actionName="Upgrade to Club Owner"
+          onProceed={() => setIsUpgradeOpen(true)}
         />
       )}
     </div>

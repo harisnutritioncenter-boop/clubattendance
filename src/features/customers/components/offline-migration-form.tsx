@@ -162,6 +162,29 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
   }, [role, activeBranchId, form]);
 
   const onSubmit = async (values: OfflineMigrationFormValues) => {
+    if (values.migrationType === 'custom') {
+      if ((values.servedShakesTillDate || 0) > (values.totalShakesPurchased || 0)) {
+        form.setError('servedShakesTillDate', { message: 'Cannot exceed total purchased shakes' });
+        return;
+      }
+      if ((values.amountPaid || 0) > (values.customPlanPrice || 0)) {
+        form.setError('amountPaid', { message: 'Cannot exceed total plan price' });
+        return;
+      }
+    } else {
+      const plan = plans.find(p => p.id === values.planId);
+      if (plan) {
+        if ((values.servedShakesTillDate || 0) > plan.shakesCount) {
+          form.setError('servedShakesTillDate', { message: `Cannot exceed plan shakes (${plan.shakesCount})` });
+          return;
+        }
+        if ((values.amountPaid || 0) > plan.price) {
+          form.setError('amountPaid', { message: `Cannot exceed plan price (₹${plan.price})` });
+          return;
+        }
+      }
+    }
+
     try {
       setError(null);
       
@@ -494,7 +517,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                 <FormItem>
                   <FormLabel>Attendances Marked Till Date</FormLabel>
                   <FormControl>
-                    <Input type="number" min="0" {...field} />
+                    <Input type="text" inputMode="numeric" pattern="[0-9]*" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -511,7 +534,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                   <FormItem>
                     <FormLabel>Total Purchased Shakes</FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" {...field} />
+                      <Input type="text" inputMode="numeric" pattern="[0-9]*" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -524,7 +547,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                   <FormItem>
                     <FormLabel>Total Plan Price</FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" {...field} />
+                      <Input type="text" inputMode="numeric" pattern="[0-9]*" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -550,10 +573,10 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                             </SelectValue>
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className="w-[max-content] min-w-[var(--anchor-width)] max-w-[85vw] sm:max-w-md overflow-x-hidden">
                           {plans.map(p => (
                             <SelectItem key={p.id} value={p.id}>
-                              {p.name} ({p.shakes} Shakes @ ₹{p.price})
+                              {p.name} ({p.shakesCount} Shakes @ ₹{p.price})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -583,7 +606,7 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                   <FormItem>
                     <FormLabel>Amount Received</FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" {...field} />
+                      <Input type="text" inputMode="numeric" pattern="[0-9]*" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -605,7 +628,6 @@ export function OfflineMigrationForm({ onSuccess, onCancel }: OfflineMigrationFo
                       <SelectContent>
                         <SelectItem value="Cash">Cash</SelectItem>
                         <SelectItem value="UPI">UPI</SelectItem>
-                        <SelectItem value="Due">Due</SelectItem>
                         <SelectItem value="Card">Card</SelectItem>
                         <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
                       </SelectContent>
