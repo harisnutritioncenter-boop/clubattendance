@@ -11,7 +11,7 @@ import { CustomerDetailsModal } from './customer-details-modal';
 import { TransferCustomerModal } from './transfer-customer-modal';
 import { CustomerForm } from './customer-form';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
-import { getDocs } from 'firebase/firestore';
+import { getDocs, query } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
 import {
   Dialog,
@@ -134,6 +134,7 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
         if (!isActive) return;
         setBalances(balanceMap);
         
+        /* FEATURE: FORMER CUSTOMERS DEBT (DISABLED) - UNCOMMENT TO RE-ENABLE
         // 4. Find former customers with debt
         let formerCustomers: any[] = [];
         try {
@@ -190,6 +191,7 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
         
         if (!isActive) return;
         setFormerCustomersWithDebt(formerCustomers);
+        */
 
       } catch (err: any) {
         console.error('Failed to fetch customers:', err);
@@ -658,7 +660,7 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
           customerName={selectedCustomer.name}
           amountDue={activeCollectFormerDebt > 0 ? activeCollectFormerDebt : balances[selectedCustomer.id].remainingBalance}
           targetJuniorPartnerId={activeCollectFormerJpId}
-          targetBranchId={authState.role === 'super_admin' ? undefined : activeBranchId}
+          targetBranchId={authState.role === 'super_admin' ? undefined : (activeBranchId || undefined)}
           onSuccess={() => {
             window.location.reload();
           }}
