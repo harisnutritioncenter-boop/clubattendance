@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { CustomerService } from '@/features/customers/services/customer.service';
+import { FamilyService } from '@/features/family/services/family.service';
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { PaymentLedgerEntry, ShakeLedgerEntry } from '@/features/ledger/types/ledger.types';
 import { MembershipService } from '@/features/memberships/services/membership.service';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import { calculateAge, formatDate, formatDateTime, cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CustomerForm } from '@/features/customers/components/customer-form';
+import { TransferCustomerModal } from '@/features/customers/components/transfer-customer-modal';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 import { useAuthStore, useBranchStore } from '@/store';
 // Create a union type for the UI since we fetch from a single ledger collection in Firebase
@@ -48,6 +50,7 @@ export default function CustomerProfilePage() {
   const [status, setStatus] = useState<CustomerMembershipStatus | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [familyNames, setFamilyNames] = useState<Record<string, string>>({});
+  const [usersMap, setUsersMap] = useState<Record<string, {name: string, role: string}>>({});
   const [loading, setLoading] = useState(true);
 
   const { user, role: authRole } = useAuthStore();
@@ -58,10 +61,20 @@ export default function CustomerProfilePage() {
   const [selectedDateLogs, setSelectedDateLogs] = useState<LedgerEntry[]>([]);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  /* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  */
   const [collectModalOpen, setCollectModalOpen] = useState(false);
+  const [targetCollectJpId, setTargetCollectJpId] = useState<string | undefined>(undefined);
+  const [targetCollectBranchId, setTargetCollectBranchId] = useState<string | undefined>(undefined);
+  const [targetCollectAmount, setTargetCollectAmount] = useState<number>(0);
   const [consumptionToRevert, setConsumptionToRevert] = useState<ShakeLedgerEntry | null>(null);
   const [paymentToRevert, setPaymentToRevert] = useState<PaymentLedgerEntry | null>(null);
   const [isSubmittingRevert, setIsSubmittingRevert] = useState(false);
+  /* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  */
   const [batches, setBatches] = useState<any[]>([]);
 
   // Attendance Mark State
@@ -98,14 +111,17 @@ export default function CustomerProfilePage() {
         setStatus(stat);
 
         // 4. Fetch Ledger (Chronological)
+        const family = await FamilyService.getFamilyForCustomer(customerId);
+        const ledgerCustomerId = family ? family.primaryCustomerId : customerId;
+
         const paymentsQ = query(
           COLLECTIONS.PAYMENT_LEDGER, 
-          where('customerId', '==', customerId),
+          where('customerId', '==', ledgerCustomerId),
           where('isArchived', '==', false)
         );
         const shakesQ = query(
           COLLECTIONS.SHAKE_LEDGER, 
-          where('customerId', '==', customerId),
+          where('customerId', '==', ledgerCustomerId), // also fetch consumptions from primary account so they perfectly match LedgerService
           where('isArchived', '==', false)
         );
         
@@ -116,12 +132,38 @@ export default function CustomerProfilePage() {
         
         let records = [...pRecords, ...sRecords].sort((a, b) => a.createdAt - b.createdAt); // oldest first
         
-        // Club owners should only see ledger entries stamped with their club ID (or legacy entries without a branchId)
-        if (authRole === 'club_owner') {
-          records = records.filter(r => r.branchId === branchId || !r.branchId);
+        if (user) {
+          // Truncate timeline for FORMER viewers (Transfer/Jugaad boundary logic)
+          if (authRole === 'junior_partner' && cust.juniorPartnerId !== user.uid) {
+            // Viewer is a FORMER Junior Partner. Hide all records after their last interaction.
+            const myLastRecord = [...records].reverse().find(r => r.juniorPartnerId === user.uid || r.createdBy === user.uid);
+            if (myLastRecord) {
+              records = records.filter(r => r.createdAt <= myLastRecord.createdAt);
+            } else {
+              records = records.filter(r => r.juniorPartnerId === user.uid); 
+            }
+          } else if (authRole === 'club_owner' && branchId && cust.branchId !== branchId && branchId !== 'default-branch' && branchId !== 'all') {
+            // Viewer is a FORMER Club Owner (Inter-club transfer). Hide all records after it left their club.
+            const myLastRecord = [...records].reverse().find(r => r.branchId === branchId);
+            if (myLastRecord) {
+              records = records.filter(r => r.createdAt <= myLastRecord.createdAt);
+            } else {
+              records = records.filter(r => r.branchId === branchId);
+            }
+          }
         }
-        
+
         setLedger(records);
+        
+        // 5. Populate users map for names
+        try {
+          const uSnap = await getDocs(COLLECTIONS.USERS);
+          const uMap: Record<string, {name: string, role: string}> = {};
+          uSnap.docs.forEach(d => {
+            uMap[d.id] = { name: d.data().name || d.data().email || 'Partner', role: d.data().role };
+          });
+          setUsersMap(uMap);
+        } catch(e) {}
 
         // Fetch Batches
         const targetBranchId = branchId || (user as any)?.clubId || 'default-branch';
@@ -141,6 +183,14 @@ export default function CustomerProfilePage() {
         const nameMap: Record<string, string> = {};
         allCusts.forEach(c => { nameMap[c.id] = c.name; });
         setFamilyNames(nameMap);
+
+        // 6. Fetch users for "Marked By" display
+        const usersSnap = await getDocs(COLLECTIONS.USERS);
+        const uMap: Record<string, {name: string, role: string}> = {};
+        usersSnap.docs.forEach(d => {
+          uMap[d.id] = { name: d.data().name || d.data().email || 'Unknown', role: d.data().role };
+        });
+        setUsersMap(uMap);
 
       } catch (err) {
         console.error(err);
@@ -230,6 +280,20 @@ export default function CustomerProfilePage() {
       setSelectedDateLogs(logs);
       setIsLogModalOpen(true);
     }
+  };
+
+  const canRevertConsumption = (sLog: ShakeLedgerEntry) => {
+    if (authRole === 'super_admin') return true;
+    if (authRole === 'club_owner') return !sLog.branchId || sLog.branchId === branchId;
+    if (authRole === 'junior_partner') return sLog.juniorPartnerId === user?.uid || (!sLog.juniorPartnerId && customer?.juniorPartnerId === user?.uid);
+    return false;
+  };
+
+  const canRevertPayment = (pLog: PaymentLedgerEntry) => {
+    if (authRole === 'super_admin') return true;
+    if (authRole === 'club_owner') return !pLog.branchId || pLog.branchId === branchId;
+    if (authRole === 'junior_partner') return pLog.juniorPartnerId === user?.uid || (!pLog.juniorPartnerId && customer?.juniorPartnerId === user?.uid);
+    return false;
   };
 
   const handleRevert = async (sLog: ShakeLedgerEntry) => {
@@ -408,19 +472,93 @@ export default function CustomerProfilePage() {
     return <div className="p-8 text-center">Customer not found.</div>;
   }
 
-  const isTransferredOut = customer && branchId && customer.branchId !== branchId && branchId !== 'default-branch' && branchId !== 'all';
+  /* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+  const isTransferredOut = customer && (
+    (branchId && customer.branchId !== branchId && branchId !== 'default-branch' && branchId !== 'all') ||
+    (authRole === 'junior_partner' && customer.juniorPartnerId !== user?.uid)
+  );
+  */
+  const isTransferredOut = false;
+
+  // Calculate debt breakdown so ANY viewer can see and collect ALL debts individually
+  const debtMap: Record<string, { jpId: string, branchId: string, amount: number }> = {};
+  
+  if (ledger && status) {
+    ledger.forEach(l => {
+      if (l.type === 'Membership' || l.type === 'Debt Collection' || l.type === 'Add Shakes' || (!l.type && (l as any).planName)) {
+         const p = l as PaymentLedgerEntry;
+         if (p.remainingBalance) {
+            // For old records that might not have jp/branch perfectly set, fallback to customer's current if it's the only one
+            const jp = p.juniorPartnerId && p.juniorPartnerId !== 'unassigned' ? p.juniorPartnerId : (customer?.juniorPartnerId || 'unassigned');
+            const br = p.branchId && p.branchId !== 'unassigned' && p.branchId !== 'default-branch' ? p.branchId : (customer?.branchId || 'unassigned');
+            
+            const key = `${jp}_${br}`;
+            if (!debtMap[key]) debtMap[key] = { jpId: jp, branchId: br, amount: 0 };
+            debtMap[key].amount += p.remainingBalance;
+         }
+      }
+    });
+  }
+
+  const debtBreakdown = Object.values(debtMap).map(d => {
+    let isLocal = false;
+    if (authRole === 'junior_partner' && d.jpId === user?.uid) isLocal = true;
+    else if (authRole === 'club_owner' && d.branchId === branchId) isLocal = true;
+    else if (authRole === 'super_admin') isLocal = true;
+    return { ...d, isLocal };
+  }).filter(d => d.amount > 0);
+
+  // Track state for multi-debt collection
+  // (We use a React anti-pattern of let variables for UI rendering, but we'll bind them in the button click)
+  let targetJpIdForCollection: string | undefined = undefined;
+  let targetBranchIdForCollection: string | undefined = undefined;
+  let targetAmountForCollection: number = 0;
+
+  // Calculate the Dead-Time Boundary for backdating
+  const lastOtherJpConsumption = ledger
+    .filter(l => l.type === 'Consumption' && l.juniorPartnerId && l.juniorPartnerId !== customer?.juniorPartnerId)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+  
+  let deadTimeBoundaryDate: Date | undefined = undefined;
+  if (lastOtherJpConsumption) {
+    deadTimeBoundaryDate = new Date(lastOtherJpConsumption.createdAt);
+    deadTimeBoundaryDate.setHours(0, 0, 0, 0); // Start of that day
+  }
+
+  /* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+  const baseDate = customer?.trialConvertedAt || customer?.createdAt || 0;
+  const isDeletable = Date.now() - baseDate <= 30 * 24 * 60 * 60 * 1000;
+
+  const handleDeleteCustomer = async () => {
+    if (!customer || !user) return;
+    try {
+      setIsDeleting(true);
+      await CustomerService.hardDeleteCustomer(customer.id, user.uid);
+      toast.success("Customer and all records successfully deleted.");
+      setDeleteModalOpen(false);
+      router.push(customer.isTrial ? '/trials' : '/customers');
+    } catch (err: any) {
+      console.error("Failed to delete customer:", err);
+      toast.error(err.message || "Failed to delete customer.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  */
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {isTransferredOut && (
+      {/* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+      isTransferredOut && (
         <div className="bg-amber-500/15 border border-amber-500/20 text-amber-600 dark:text-amber-400 p-4 rounded-lg flex items-start gap-3">
           <Info className="h-5 w-5 shrink-0 mt-0.5" />
           <div>
             <h3 className="font-semibold">Transferred Customer</h3>
-            <p className="text-sm mt-1">This customer has been transferred to another club. You are viewing historical data only, and you cannot modify their profile, mark attendance, or collect payments.</p>
+            <p className="text-sm mt-1">This customer has been transferred to another partner or club. You are viewing historical data only, and you cannot modify their profile, mark attendance, or collect payments.</p>
           </div>
         </div>
-      )}
+      )
+      */}
       
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -439,24 +577,66 @@ export default function CustomerProfilePage() {
             </div>
           </div>
         </div>
-        {!isTransferredOut && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button 
-              className="bg-green-600 hover:bg-green-700 text-white" 
-              onClick={() => {
-                setServeCount(1);
-                setAttendanceSuccess(false);
-                setIsMarkAttendanceOpen(true);
-              }}
-            >
-              <Check className="mr-2 h-4 w-4" /> Mark Attendance
-            </Button>
-            <Button variant="outline" onClick={() => setEditModalOpen(true)}>Edit Profile</Button>
-            {status && status.remainingBalance > 0 && (
-               <Button variant="destructive" onClick={() => setCollectModalOpen(true)}>Collect Debt (₹{status.remainingBalance})</Button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {!isTransferredOut && (
+            <>
+              <Button 
+                className="bg-green-600 hover:bg-green-700 text-white" 
+                onClick={() => {
+                  setServeCount(1);
+                  setAttendanceSuccess(false);
+                  setIsMarkAttendanceOpen(true);
+                }}
+              >
+                <Check className="mr-2 h-4 w-4" /> Mark Attendance
+              </Button>
+              {/* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+              (authRole === 'super_admin' || authRole === 'club_owner') && (
+                <Button 
+                  variant="outline" 
+                  className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-900/50"
+                  onClick={() => {
+                    if (status && !status.isExpired) {
+                      toast.error("Cannot transfer a customer with an active membership.");
+                      return;
+                    }
+                    if (debtBreakdown.length > 0) {
+                      toast.error("Cannot transfer a customer with outstanding debt. Please collect all debt first.");
+                      return;
+                    }
+                    setTransferModalOpen(true);
+                  }}
+                >
+                  Transfer
+                </Button>
+              )
+              */}
+              <Button variant="outline" onClick={() => setEditModalOpen(true)}>Edit Profile</Button>
+              {/* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+              authRole === 'super_admin' && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => setDeleteModalOpen(true)}
+                  disabled={!isDeletable}
+                  className={cn("text-white", isDeletable ? "bg-red-600 hover:bg-red-700" : "bg-red-400 opacity-50")}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete Record
+                </Button>
+              )
+              */}
+            </>
+          )}
+          {debtBreakdown.map((debt, idx) => (
+             <Button key={idx} variant={debt.isLocal ? "destructive" : "secondary"} onClick={() => {
+                 setTargetCollectJpId(debt.jpId !== 'unassigned' ? debt.jpId : undefined);
+                 setTargetCollectBranchId(debt.branchId !== 'unassigned' ? debt.branchId : undefined);
+                 setTargetCollectAmount(debt.amount);
+                 setCollectModalOpen(true);
+             }}>
+               Collect Debt (₹{debt.amount}) {debt.jpId !== 'unassigned' && usersMap[debt.jpId] ? `for ${usersMap[debt.jpId].name}` : ''}
+             </Button>
+          ))}
+        </div>
       </div>
 
       <Tabs defaultValue="calendar" className="w-full">
@@ -661,7 +841,7 @@ export default function CustomerProfilePage() {
                         <td className="p-4">{pEntry.paymentMethod || '-'}</td>
                         <td className="p-4 text-muted-foreground text-xs max-w-xs truncate" title={pEntry.notes}>{pEntry.notes || '-'}</td>
                         <td className="p-4">
-                          {pEntry.type === 'Membership' && (
+                          {pEntry.type === 'Membership' && canRevertPayment(pEntry) && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -697,7 +877,11 @@ export default function CustomerProfilePage() {
             {selectedDateLogs.map((log, i) => {
               const sLog = log as ShakeLedgerEntry;
               const consumerName = sLog.consumedBy && familyNames[sLog.consumedBy] ? familyNames[sLog.consumedBy] : customer?.name;
-              const markedByName = sLog.createdBy === customer?.juniorPartnerId ? (partnerName || 'Partner') : 'Admin';
+              let markedByName = 'Admin';
+              if (usersMap[sLog.createdBy]) {
+                const u = usersMap[sLog.createdBy];
+                markedByName = u.name !== 'Unknown' ? u.name : (u.role === 'club_owner' ? 'Club Owner' : u.role === 'junior_partner' ? 'Partner' : 'Admin');
+              }
               
               let displayNotes = sLog.notes || 'Marked attendance';
               if (displayNotes.includes('Served') && displayNotes.includes('shakes')) {
@@ -721,7 +905,7 @@ export default function CustomerProfilePage() {
                     ) : (
                       <Badge variant="outline">-{sLog.shakesDeducted || 1} Attendance(s)</Badge>
                     )}
-                    {!sLog.isTransfer && (
+                    {canRevertConsumption(sLog) && !sLog.isTransfer && (
                       <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleRevert(sLog)} title="Revert Consumption">
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -755,13 +939,22 @@ export default function CustomerProfilePage() {
         </Dialog>
       )}
 
-      {customer && status && status.remainingBalance > 0 && (
+      {customer && status && debtBreakdown.length > 0 && (
         <CollectPaymentModal
           isOpen={collectModalOpen}
-          onOpenChange={setCollectModalOpen}
+          onOpenChange={(open) => {
+            setCollectModalOpen(open);
+            if (!open) {
+               setTargetCollectJpId(undefined);
+               setTargetCollectBranchId(undefined);
+               setTargetCollectAmount(0);
+            }
+          }}
           customerId={customer.id}
           customerName={customer.name}
-          amountDue={status.remainingBalance}
+          amountDue={targetCollectAmount > 0 ? targetCollectAmount : debtBreakdown[0]?.amount || 0}
+          targetJuniorPartnerId={targetCollectJpId}
+          targetBranchId={targetCollectBranchId}
           onSuccess={() => window.location.reload()}
         />
       )}
@@ -914,7 +1107,7 @@ export default function CustomerProfilePage() {
                               setServeDate(localDateStr);
                             }
                           }}
-                          disabled={(date) => date > new Date()}
+                          disabled={(date) => date > new Date() || (!!deadTimeBoundaryDate && date < deadTimeBoundaryDate)}
                         />
                       </PopoverContent>
                     </Popover>
@@ -935,6 +1128,55 @@ export default function CustomerProfilePage() {
           </DialogContent>
         </Dialog>
       )}
+      
+      {/* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+      customer && (
+        <TransferCustomerModal
+          isOpen={transferModalOpen}
+          onOpenChange={setTransferModalOpen}
+          customer={customer}
+          onSuccess={() => {
+            setTransferModalOpen(false);
+            window.location.reload();
+          }}
+        />
+      )
+      */}
+
+      {/* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 dark:text-red-500 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" /> Delete Customer Record
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              Are you sure you want to completely erase <strong>{customer?.name}</strong> from the system?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-50 dark:bg-red-950/30 p-4 rounded-lg my-2 border border-red-200 dark:border-red-900/50">
+            <ul className="list-disc pl-4 space-y-2 text-sm text-red-800 dark:text-red-400 font-medium">
+              <li>All payments will be voided and revenue reversed.</li>
+              <li>All attendances will be voided and shakes fully refunded to the Junior Partner's inventory.</li>
+              <li>The customer profile will be permanently deleted.</li>
+            </ul>
+          </div>
+          
+          <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-400 text-sm font-medium">
+            <p><strong>Time elapsed:</strong> {Math.floor((Date.now() - baseDate) / (1000 * 60 * 60 * 24))} days</p>
+            <p><strong>Time remaining to delete:</strong> {Math.max(0, 30 - Math.floor((Date.now() - baseDate) / (1000 * 60 * 60 * 24)))} days</p>
+            <p className="text-xs mt-1 opacity-80">After this time, you will not be able to delete this record.</p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button variant="outline" onClick={() => setDeleteModalOpen(false)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteCustomer} disabled={isDeleting} className="bg-red-600 hover:bg-red-700 text-white">
+              {isDeleting ? 'Deleting...' : 'Yes, Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      */}
     </div>
   );
 }

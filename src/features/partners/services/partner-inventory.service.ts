@@ -1,5 +1,6 @@
 import { addDoc, getDocs, query, where, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { COLLECTIONS } from '@/firebase';
+import { cleanPayload } from '@/lib/utils';
 
 export interface PartnerInventoryEntry {
   id?: string;
@@ -37,7 +38,7 @@ export class PartnerInventoryService {
     paymentType?: 'Full' | 'Partial' | 'Due',
     clubId?: string
   ): Promise<string> {
-    const entry: Omit<PartnerInventoryEntry, 'id'> = {
+    const entry: Partial<PartnerInventoryEntry> = {
       partnerId,
       type: 'ADDITION',
       amount: Math.abs(amount),
@@ -51,8 +52,8 @@ export class PartnerInventoryService {
       createdAt: createdAt || Date.now(),
       isArchived: false,
     };
-
-    const newDoc = await addDoc(COLLECTIONS.PARTNER_INVENTORY_LEDGER, entry);
+    
+    const newDoc = await addDoc(COLLECTIONS.PARTNER_INVENTORY_LEDGER, cleanPayload(entry as Record<string, any>) as Omit<PartnerInventoryEntry, 'id'>);
     return newDoc.id;
   }
 
@@ -64,7 +65,7 @@ export class PartnerInventoryService {
     notes?: string,
     clubId?: string
   ): Promise<string> {
-    const entry: Omit<PartnerInventoryEntry, 'id'> = {
+    const entry: Partial<PartnerInventoryEntry> = {
       partnerId,
       type: 'DEBT_COLLECTION',
       amount: 0,
@@ -79,7 +80,7 @@ export class PartnerInventoryService {
       isArchived: false,
     };
 
-    const newDoc = await addDoc(COLLECTIONS.PARTNER_INVENTORY_LEDGER, entry);
+    const newDoc = await addDoc(COLLECTIONS.PARTNER_INVENTORY_LEDGER, cleanPayload(entry as Record<string, any>) as Omit<PartnerInventoryEntry, 'id'>);
     return newDoc.id;
   }
 
@@ -140,18 +141,18 @@ export class PartnerInventoryService {
     notes?: string,
     createdAt?: number
   ): Promise<string> {
-    const entry: Omit<PartnerInventoryEntry, 'id'> = {
+    const entry: Partial<PartnerInventoryEntry> = {
       partnerId,
       type: 'DEDUCTION',
       amount: Math.abs(amount),
       customerId,
-      notes: notes || 'Admin deducted shakes',
+      notes: notes || 'Attendance deduction',
       createdBy,
       createdAt: createdAt || Date.now(),
       isArchived: false,
     };
 
-    const newDoc = await addDoc(COLLECTIONS.PARTNER_INVENTORY_LEDGER, entry);
+    const newDoc = await addDoc(COLLECTIONS.PARTNER_INVENTORY_LEDGER, cleanPayload(entry as Record<string, any>) as Omit<PartnerInventoryEntry, 'id'>);
     return newDoc.id;
   }
 

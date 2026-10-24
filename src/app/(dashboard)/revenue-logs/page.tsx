@@ -86,7 +86,7 @@ export default function RevenueLogsPage() {
       });
 
       let formattedLogs = payments.map(p => {
-        const actualPartnerId = customerPartnerMap[p.customerId] || p.createdBy;
+        const actualPartnerId = p.juniorPartnerId || customerPartnerMap[p.customerId] || p.createdBy;
         return {
           ...p,
           actualPartnerId,
@@ -98,7 +98,7 @@ export default function RevenueLogsPage() {
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(p => (customerPartnerMap[p.customerId] || p.createdBy) === user.uid && !(p as any).isHistoricalCopy);
+        formattedLogs = formattedLogs.filter(p => (p.juniorPartnerId || customerPartnerMap[p.customerId] || p.createdBy) === user.uid && !(p as any).isHistoricalCopy);
       }
 
       setLogs(formattedLogs);

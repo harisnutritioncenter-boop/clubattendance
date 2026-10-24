@@ -15,22 +15,24 @@ export class LedgerService {
     data: Omit<PaymentLedgerEntry, 'id' | 'createdAt' | 'isArchived'> & { createdAt?: number }
   ): Promise<string> {
     
-    // Ensure Admin payments route to the customer's actual club!
+    // Ensure Admin payments route to the customer's actual club, BUT trust explicitly passed branchIds!
     let verifiedBranchId = data.branchId;
-    try {
-      if (data.customerId) {
-        const customerDoc = await getDoc(doc(COLLECTIONS.CUSTOMERS, data.customerId));
-        if (customerDoc.exists() && customerDoc.data().branchId) {
-          verifiedBranchId = customerDoc.data().branchId;
+    if (!verifiedBranchId || verifiedBranchId === 'all' || verifiedBranchId === 'default-branch') {
+      try {
+        if (data.customerId) {
+          const customerDoc = await getDoc(doc(COLLECTIONS.CUSTOMERS, data.customerId));
+          if (customerDoc.exists() && customerDoc.data().branchId) {
+            verifiedBranchId = customerDoc.data().branchId;
+          }
         }
+        
+        const userDoc = await getDoc(doc(COLLECTIONS.USERS, data.createdBy));
+        if (userDoc.exists() && userDoc.data().role === 'junior_partner') {
+           verifiedBranchId = userDoc.data().clubId || verifiedBranchId;
+        }
+      } catch (e) {
+        console.warn("Failed to verify user/customer branchId for payment", e);
       }
-      
-      const userDoc = await getDoc(doc(COLLECTIONS.USERS, data.createdBy));
-      if (userDoc.exists() && userDoc.data().role === 'junior_partner') {
-         verifiedBranchId = userDoc.data().clubId || verifiedBranchId;
-      }
-    } catch (e) {
-      console.warn("Failed to verify user/customer branchId for payment", e);
     }
 
     const newDoc = await addDoc(COLLECTIONS.PAYMENT_LEDGER, cleanPayload({
@@ -86,19 +88,21 @@ export class LedgerService {
     const consumer = await CustomerService.getCustomer(actualConsumerId);
     const consumedByName = consumer?.name || 'Unknown Consumer';
 
-    // Ensure Admin shakes route to the customer's actual club!
+    // Ensure Admin shakes route to the customer's actual club, BUT trust explicitly passed branchIds!
     let verifiedBranchId = data.branchId;
-    try {
-      if (consumer?.branchId) {
-        verifiedBranchId = consumer.branchId;
+    if (!verifiedBranchId || verifiedBranchId === 'all' || verifiedBranchId === 'default-branch') {
+      try {
+        if (consumer?.branchId) {
+          verifiedBranchId = consumer.branchId;
+        }
+        
+        const userDoc = await getDoc(doc(COLLECTIONS.USERS, data.createdBy));
+        if (userDoc.exists() && userDoc.data().role === 'junior_partner') {
+           verifiedBranchId = userDoc.data().clubId || verifiedBranchId;
+        }
+      } catch (e) {
+        console.warn("Failed to verify user/customer branchId for shake", e);
       }
-      
-      const userDoc = await getDoc(doc(COLLECTIONS.USERS, data.createdBy));
-      if (userDoc.exists() && userDoc.data().role === 'junior_partner') {
-         verifiedBranchId = userDoc.data().clubId || verifiedBranchId;
-      }
-    } catch (e) {
-      console.warn("Failed to verify user/customer branchId for shake", e);
     }
 
     const newDoc = await addDoc(COLLECTIONS.SHAKE_LEDGER, cleanPayload({
@@ -605,7 +609,12 @@ export class LedgerService {
         data.shakesDeducted,
         voidedBy,
         'Refund for voided consumption',
-        data.createdAt
+        data.createdAt,
+        0,
+        0,
+        undefined,
+        undefined,
+        data.branchId
       );
     }
   }
@@ -661,6 +670,32 @@ export class LedgerService {
       data.branchId
     );
   }
+  /* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+  static async voidAllCustomerTransactions(customerId: string, adminId: string): Promise<void> {
+    // Void all active payments (reverses revenue, invalidates shakes)
+    const paymentsQuery = query(
+      COLLECTIONS.PAYMENT_LEDGER,
+      where('customerId', '==', customerId),
+      where('isArchived', '==', false)
+    );
+    const pSnap = await getDocs(paymentsQuery);
+    for (const d of pSnap.docs) {
+      await this.voidPayment(d.id, adminId);
+    }
+
+    // Void all active consumptions (refunds JP inventory)
+    const consumptionsQuery = query(
+      COLLECTIONS.SHAKE_LEDGER,
+      where('customerId', '==', customerId),
+      where('isArchived', '==', false)
+    );
+    const cSnap = await getDocs(consumptionsQuery);
+    for (const d of cSnap.docs) {
+      await this.voidConsumption(d.id, adminId);
+    }
+  }
+  */
+
   static async revertConsumption(consumptionId: string, revertedBy: string): Promise<void> {
     const docRef = doc(COLLECTIONS.SHAKE_LEDGER, consumptionId);
     const snap = await getDoc(docRef);
@@ -683,7 +718,7 @@ export class LedgerService {
         data.shakesDeducted,
         data.customerId,
         revertedBy,
-        `Re-deduction for reverted void consumption: ${consumptionId}`,
+        `Re-deduction for reverted void consumption`,
         data.createdAt
       );
     }

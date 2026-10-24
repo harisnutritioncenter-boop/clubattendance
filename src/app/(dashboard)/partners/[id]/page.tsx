@@ -870,6 +870,7 @@ export default function PartnerProfilePage() {
       </Dialog>
       <ManageShakesModal 
         partnerId={partner.id}
+        clubId={partner.clubId}
         partnerName={partner.name || partner.email || 'Partner'}
         isOpen={isAssignOpen}
         onOpenChange={setIsAssignOpen}

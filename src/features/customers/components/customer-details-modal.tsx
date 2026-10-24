@@ -16,6 +16,7 @@ interface CustomerDetailsModalProps {
   onOpenChange: (open: boolean) => void;
   onAssignPlanClick?: () => void;
   onEditClick?: () => void;
+  onTransferClick?: () => void;
   onCollectDebtClick?: () => void;
   onArchiveClick?: () => void;
 }
@@ -28,6 +29,7 @@ export function CustomerDetailsModal({
   onOpenChange,
   onAssignPlanClick,
   onEditClick,
+  onTransferClick,
   onCollectDebtClick,
   onArchiveClick
 }: CustomerDetailsModalProps) {

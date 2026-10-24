@@ -34,6 +34,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Calendar as CalendarIcon } from 'lucide-react';
 
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { Trash2 } from 'lucide-react';
+
 const PURPOSES: CustomerPurpose[] = [
   'Weight Loss',
   'Weight Gain',
@@ -56,6 +60,30 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
   const { user, role } = useAuthStore();
   const { activeBranchId } = useBranchStore();
   const [error, setError] = useState<string | null>(null);
+  
+  /* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  const baseDate = customer?.trialConvertedAt || customer?.createdAt || 0;
+  const isDeletable = Date.now() - baseDate <= 30 * 24 * 60 * 60 * 1000;
+
+  const handleDelete = async () => {
+    if (!customer || !user) return;
+    try {
+      setIsDeleting(true);
+      await CustomerService.hardDeleteCustomer(customer.id, user.uid);
+      toast.success("Customer and all records successfully deleted.");
+      setDeleteModalOpen(false);
+      window.location.href = customer.isTrial ? '/trials' : '/customers';
+    } catch (err: any) {
+      console.error("Failed to delete customer:", err);
+      toast.error(err.message || "Failed to delete customer.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  */
   
   const [allJuniorPartners, setAllJuniorPartners] = useState<{id: string, name: string, branchId: string}[]>([]);
   const [filteredJuniorPartners, setFilteredJuniorPartners] = useState<{value: string, label: string}[]>([]);
@@ -383,7 +411,14 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
 
         {/* Assignment Info */}
         <div className="p-5 bg-muted/20 border rounded-xl space-y-4">
-          <h3 className="font-semibold text-sm">Assignment Options</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm">Assignment Options</h3>
+            {!!customer && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded">
+                Assignments cannot be edited.
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {role === 'super_admin' && !isTrial && (
               <FormField
@@ -392,7 +427,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Club (Branch)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} disabled={!!form.watch('juniorPartnerId')}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={!!customer || !!form.watch('juniorPartnerId')}>
                       <FormControl>
                         <SelectTrigger className="disabled:opacity-50">
                           <SelectValue placeholder="Select a club">
@@ -421,6 +456,7 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
                   <Combobox
                     options={filteredJuniorPartners}
                     value={field.value || ''}
+                    disabled={!!customer}
                     onChange={(val) => {
                       field.onChange(val);
                       if (val && role === 'super_admin') {
@@ -628,18 +664,72 @@ export function CustomerForm({ onSuccess, onCancel, isTrial, customer }: Custome
 
         {error && <p className="text-sm font-medium text-destructive">{error}</p>}
 
-        <div className="flex justify-end gap-4">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
+        <div className="flex justify-between items-center mt-6">
+          <div>
+            {/* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+            customer && role === 'super_admin' && (
+              <Button 
+                type="button" 
+                variant="destructive"
+                onClick={() => setDeleteModalOpen(true)}
+                disabled={!isDeletable}
+                className={cn("text-white", isDeletable ? "bg-red-600 hover:bg-red-700" : "bg-red-400 opacity-50")}
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete Record
+              </Button>
+            )
+            */}
+          </div>
+          <div className="flex gap-4">
+            {onCancel && (
+              <Button type="button" variant="outline" onClick={onCancel}>
+                Cancel
+              </Button>
+            )}
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? 'Saving...' : 'Save Customer'}
             </Button>
-          )}
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? 'Saving...' : 'Save Customer'}
-          </Button>
+          </div>
         </div>
       </form>
     </Form>
+
+    {/* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+    customer && (
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 dark:text-red-500 flex items-center gap-2">
+               Delete {isTrial ? 'Trial' : 'Customer'} Record
+            </DialogTitle>
+            <DialogDescription className="text-base pt-2">
+              Are you sure you want to completely erase <strong>{customer.name}</strong> from the system?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-50 dark:bg-red-950/30 p-4 rounded-lg my-2 border border-red-200 dark:border-red-900/50">
+            <ul className="list-disc pl-4 space-y-2 text-sm text-red-800 dark:text-red-400 font-medium">
+              <li>All payments will be voided and revenue reversed.</li>
+              <li>All attendances will be voided and shakes fully refunded.</li>
+              <li>The profile will be permanently deleted.</li>
+            </ul>
+          </div>
+          
+          <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-400 text-sm font-medium">
+            <p><strong>Time elapsed:</strong> {Math.floor((Date.now() - baseDate) / (1000 * 60 * 60 * 24))} days</p>
+            <p><strong>Time remaining to delete:</strong> {Math.max(0, 30 - Math.floor((Date.now() - baseDate) / (1000 * 60 * 60 * 24)))} days</p>
+            <p className="text-xs mt-1 opacity-80">After this time, you will not be able to delete this record.</p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button variant="outline" onClick={() => setDeleteModalOpen(false)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting} className="bg-red-600 hover:bg-red-700 text-white">
+              {isDeleting ? 'Deleting...' : 'Yes, Delete Permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+    */}
 
     <TimedConfirmDialog
       open={showReassignDialog}

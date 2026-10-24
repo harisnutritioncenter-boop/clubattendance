@@ -63,6 +63,10 @@ export class MembershipService {
 
     const customer = await CustomerService.getCustomer(customerId);
 
+    // If an Admin assigns a membership while viewing a transferred customer, 
+    // the activeBranchId in the UI might be the old club. We MUST force the branch to be the customer's actual current branch!
+    const verifiedBranchId = (branchId === 'all' || branchId === 'default-branch' || customer?.branchId) ? (customer?.branchId || branchId) : branchId;
+
     // 2. Add to payment ledger
     const ledgerEntry = {
       customerId,
@@ -74,7 +78,7 @@ export class MembershipService {
       shakesAdded: plan.shakesCount,
       validityDays: plan.validityDays,
       planName: plan.name,
-      branchId,
+      branchId: verifiedBranchId,
       juniorPartnerId: customer?.juniorPartnerId,
       createdBy,
       notes: `Membership Assigned: ${plan.name}` + (remainingBalance > 0 ? ` (Partial Payment. Balance: ${remainingBalance})` : ''),

@@ -197,7 +197,7 @@ export function MembershipAnalytics({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {plans.map((plan) => {
-              const stats = getPlanStats(plan.name);
+              const stats = getPlanStats(plan.name, selectedClubId || undefined, selectedPartnerId || undefined);
               return (
                 <div 
                   key={plan.id} 

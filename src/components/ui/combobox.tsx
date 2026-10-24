@@ -33,20 +33,22 @@ interface ComboboxProps {
   onAddNew?: () => void;
   addNewText?: string;
   id?: string;
+  disabled?: boolean;
 }
 
-export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No option found.", onAddNew, addNewText, id }: ComboboxProps) {
+export function Combobox({ options, value, onChange, placeholder = "Select option...", emptyText = "No option found.", onAddNew, addNewText, id, disabled }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={disabled ? false : open} onOpenChange={setOpen}>
       <PopoverTrigger render={
         <Button
           id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between"
+          disabled={disabled}
+          className={cn("w-full justify-between", disabled && "opacity-50 cursor-not-allowed")}
         />
       }>
         {value

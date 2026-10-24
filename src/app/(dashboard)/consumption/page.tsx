@@ -535,6 +535,7 @@ export default function ConsumptionPage() {
       {selectedCustomer && assignedPartnerId && (
         <ManageShakesModal 
           partnerId={assignedPartnerId}
+          clubId={selectedCustomer.branchId || (branchId && branchId !== 'all' ? branchId : undefined)}
           partnerName={assignedPartnerName}
           isOpen={isAddShakesModalOpen}
           onOpenChange={setIsAddShakesModalOpen}

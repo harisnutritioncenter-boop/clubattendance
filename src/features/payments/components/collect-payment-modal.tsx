@@ -18,6 +18,8 @@ interface CollectPaymentModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  targetJuniorPartnerId?: string;
+  targetBranchId?: string;
 }
 
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Bank Transfer'];
@@ -28,7 +30,9 @@ export function CollectPaymentModal({
   amountDue,
   isOpen,
   onOpenChange,
-  onSuccess
+  onSuccess,
+  targetJuniorPartnerId,
+  targetBranchId
 }: CollectPaymentModalProps) {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -62,8 +66,8 @@ export function CollectPaymentModal({
       // remainingBalance is negative (reduces the global due balance)
       await LedgerService.addPayment({
         customerId,
-        branchId,
-        juniorPartnerId: customer?.juniorPartnerId,
+        branchId: targetBranchId || branchId,
+        juniorPartnerId: targetJuniorPartnerId !== undefined ? targetJuniorPartnerId : customer?.juniorPartnerId,
         amount: numAmount,
         paymentMethod: paymentMethod as any,
         type: 'Debt Collection',

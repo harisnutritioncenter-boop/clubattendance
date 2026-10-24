@@ -19,6 +19,13 @@ export interface Customer {
   purpose: CustomerPurpose[];
   otherPurposeDescription?: string;
   pastBranchIds?: string[];
+  transferHistory?: {
+    oldJuniorPartnerId: string | null;
+    newJuniorPartnerId: string;
+    oldBranchId: string | null;
+    newBranchId: string;
+    transferredAt: number;
+  }[];
   notes?: string;
   isTrial?: boolean;
   wasTrial?: boolean;

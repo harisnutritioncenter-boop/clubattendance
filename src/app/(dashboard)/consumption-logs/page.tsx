@@ -92,7 +92,7 @@ export default function ConsumptionLogsPage() {
         .filter(c => !c.isTransfer)
         .map(c => {
         const partnerId = c.createdBy;
-        const assignedJpId = customerPartnerMap[c.customerId];
+        const assignedJpId = c.juniorPartnerId || customerPartnerMap[c.customerId]; // Use stamped ID first
         return {
           ...c,
           partnerId,
@@ -107,7 +107,7 @@ export default function ConsumptionLogsPage() {
 
       const user = useAuthStore.getState().user;
       if (authRole === 'junior_partner' && user) {
-        formattedLogs = formattedLogs.filter(c => (customerPartnerMap[c.customerId] || c.createdBy) === user.uid && !(c as any).isHistoricalCopy);
+        formattedLogs = formattedLogs.filter(c => (c.juniorPartnerId || customerPartnerMap[c.customerId] || c.createdBy) === user.uid && !(c as any).isHistoricalCopy);
       }
 
       setLogs(formattedLogs);

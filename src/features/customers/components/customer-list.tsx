@@ -8,6 +8,7 @@ import { AssignMembershipModal } from '@/features/memberships/components/assign-
 import { LedgerService } from '@/features/ledger/services/ledger.service';
 import { CustomerMembershipStatus } from '@/features/memberships/types/membership.types';
 import { CustomerDetailsModal } from './customer-details-modal';
+import { TransferCustomerModal } from './transfer-customer-modal';
 import { CustomerForm } from './customer-form';
 import { CollectPaymentModal } from '@/features/payments/components/collect-payment-modal';
 import { getDocs } from 'firebase/firestore';
@@ -49,6 +50,8 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [formerCustomersWithDebt, setFormerCustomersWithDebt] = useState<any[]>([]);
+
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -63,7 +66,12 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [collectModalOpen, setCollectModalOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  
+  // To track active collect debt for former customers
+  const [activeCollectFormerDebt, setActiveCollectFormerDebt] = useState<number>(0);
+  const [activeCollectFormerJpId, setActiveCollectFormerJpId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let isActive = true;
@@ -125,6 +133,63 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
         
         if (!isActive) return;
         setBalances(balanceMap);
+        
+        // 4. Find former customers with debt
+        let formerCustomers: any[] = [];
+        try {
+          const ledgerQuery = query(COLLECTIONS.PAYMENT_LEDGER);
+          const ledgerSnap = await getDocs(ledgerQuery);
+          const debtMap: Record<string, number> = {};
+          const jpMap: Record<string, string> = {};
+          
+          ledgerSnap.docs.forEach(d => {
+            const entry = d.data();
+            if (entry.isArchived) return;
+            
+            let belongsToContext = false;
+            let contextJpId = entry.juniorPartnerId;
+            
+            if (authState.role === 'junior_partner') {
+               belongsToContext = entry.juniorPartnerId === authState.user?.uid;
+            } else if (authState.role === 'club_owner') {
+               belongsToContext = entry.branchId === activeBranchId;
+            } else if (authState.role === 'super_admin') {
+               belongsToContext = true;
+               if (activeBranchId && activeBranchId !== 'all') {
+                  belongsToContext = entry.branchId === activeBranchId;
+               }
+            }
+            
+            if (belongsToContext && entry.remainingBalance) {
+               if (!debtMap[entry.customerId]) debtMap[entry.customerId] = 0;
+               debtMap[entry.customerId] += entry.remainingBalance;
+               // Store the latest JP that served them in this context
+               if (contextJpId && contextJpId !== 'unassigned') {
+                  jpMap[entry.customerId] = contextJpId;
+               }
+            }
+          });
+          
+          const debtCustomerIds = Object.keys(debtMap).filter(id => debtMap[id] > 0 && !data.find(c => c.id === id));
+          if (debtCustomerIds.length > 0) {
+            const customersSnap = await getDocs(COLLECTIONS.CUSTOMERS);
+            const allCustomers = customersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+            
+            formerCustomers = debtCustomerIds.map(id => {
+               const c = allCustomers.find(cust => cust.id === id);
+               return {
+                  customer: c,
+                  debt: debtMap[id],
+                  targetJpId: authState.role === 'junior_partner' ? authState.user?.uid : jpMap[id]
+               };
+            }).filter(item => item.customer);
+          }
+        } catch (e) {
+          console.warn("Failed to fetch former customer debts", e);
+        }
+        
+        if (!isActive) return;
+        setFormerCustomersWithDebt(formerCustomers);
 
       } catch (err: any) {
         console.error('Failed to fetch customers:', err);
@@ -433,11 +498,13 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
                     <TableCell className="font-semibold">
                       <div className="flex items-center gap-2">
                         {customer.name}
-                        {activeBranchId && customer.branchId !== activeBranchId && activeBranchId !== 'default-branch' && activeBranchId !== 'all' && (
+                        {/* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+                        activeBranchId && customer.branchId !== activeBranchId && activeBranchId !== 'default-branch' && activeBranchId !== 'all' && (
                           <Badge variant="secondary" className="text-[10px] bg-muted/50 text-muted-foreground whitespace-nowrap pointer-events-none">
                             Transferred Out
                           </Badge>
-                        )}
+                        )
+                        */}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -493,9 +560,63 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
         </Table>
       </div>
       
+      {/* FEATURE: FORMER CUSTOMERS DEBT (DISABLED) - UNCOMMENT TO RE-ENABLE
+      formerCustomersWithDebt.length > 0 && (
+        <div className="mt-8 rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-amber-200 dark:border-amber-900 bg-amber-100/50 dark:bg-amber-900/30">
+            <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-500 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Pending Debt from Former Customers
+            </h3>
+            <p className="text-sm text-amber-700/80 dark:text-amber-400/80 mt-1">
+              These customers have transferred to other partners or clubs but still owe debt to you.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer Name</TableHead>
+                  <TableHead>Mobile</TableHead>
+                  <TableHead className="text-right">Amount Due</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {formerCustomersWithDebt.map((fc) => (
+                  <TableRow key={fc.customer.id}>
+                    <TableCell className="font-medium">
+                      <Link href={`/customers/${fc.customer.id}`} className="hover:underline hover:text-primary transition-colors cursor-pointer">
+                        {fc.customer.name || 'Unnamed'}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{fc.customer.mobile}</TableCell>
+                    <TableCell className="text-right text-destructive font-bold">₹{fc.debt}</TableCell>
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="destructive" onClick={() => {
+                        setSelectedCustomer(fc.customer);
+                        setActiveCollectFormerDebt(fc.debt);
+                        setActiveCollectFormerJpId(fc.targetJpId);
+                        setCollectModalOpen(true);
+                      }}>
+                        Collect Debt
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )
+      */}
+
       {/* Global Modals */}
       {(() => {
+        /* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
         const isTransferredOutSelected = selectedCustomer && activeBranchId && selectedCustomer.branchId !== activeBranchId && activeBranchId !== 'default-branch' && activeBranchId !== 'all';
+        */
+        const isTransferredOutSelected = false;
         return (
           <CustomerDetailsModal
             isOpen={detailsModalOpen}
@@ -523,18 +644,26 @@ export function CustomerList({ filterByPartnerId }: { filterByPartnerId?: string
         />
       )}
 
-      {selectedCustomer && balances[selectedCustomer.id] && balances[selectedCustomer.id].remainingBalance > 0 && (
+      {(selectedCustomer && balances[selectedCustomer.id] && balances[selectedCustomer.id].remainingBalance > 0) || (selectedCustomer && activeCollectFormerDebt > 0) ? (
         <CollectPaymentModal
           isOpen={collectModalOpen}
-          onOpenChange={setCollectModalOpen}
+          onOpenChange={(open) => {
+            setCollectModalOpen(open);
+            if (!open) {
+               setActiveCollectFormerDebt(0);
+               setActiveCollectFormerJpId(undefined);
+            }
+          }}
           customerId={selectedCustomer.id}
           customerName={selectedCustomer.name}
-          amountDue={balances[selectedCustomer.id].remainingBalance}
+          amountDue={activeCollectFormerDebt > 0 ? activeCollectFormerDebt : balances[selectedCustomer.id].remainingBalance}
+          targetJuniorPartnerId={activeCollectFormerJpId}
+          targetBranchId={authState.role === 'super_admin' ? undefined : activeBranchId}
           onSuccess={() => {
             window.location.reload();
           }}
         />
-      )}
+      ) : null}
 
       {selectedCustomer && (
         <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>

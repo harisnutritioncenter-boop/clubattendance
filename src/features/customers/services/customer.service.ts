@@ -6,7 +6,9 @@ import {
   query,
   updateDoc,
   where,
-  orderBy
+  orderBy,
+  arrayUnion,
+  deleteDoc
 } from 'firebase/firestore';
 import { db, COLLECTIONS } from '@/firebase';
 import { cleanPayload } from '@/lib/utils';
@@ -14,6 +16,8 @@ import { Customer, CreateCustomerDTO } from '../types/customer.types';
 import { runTransaction } from 'firebase/firestore';
 
 import { ActivityLogsService } from '@/features/activity-logs/services/activity.service';
+import { FamilyService } from '@/features/family/services/family.service';
+import { LedgerService } from '@/features/ledger/services/ledger.service';
 
 export class CustomerService {
   private static activeCustomersCache: Customer[] | null = null;
@@ -145,6 +149,98 @@ export class CustomerService {
     );
     this.clearCache();
   }
+
+  /* FEATURE: TRANSFER CUSTOMER (DISABLED) - UNCOMMENT TO RE-ENABLE
+  static async transferCustomer(
+    customerId: string, 
+    newJuniorPartnerId: string, 
+    newBranchId: string, 
+    performedBy: string
+  ): Promise<void> {
+    const docRef = doc(COLLECTIONS.CUSTOMERS, customerId);
+    const cSnap = await getDoc(docRef);
+    
+    if (!cSnap.exists()) {
+      throw new Error("Customer not found");
+    }
+
+    const data = cSnap.data();
+    const oldJuniorPartnerId = data.juniorPartnerId;
+    const oldBranchId = data.branchId;
+    const transferredAt = Date.now();
+
+    const updates: any = {
+      juniorPartnerId: newJuniorPartnerId,
+      branchId: newBranchId,
+      updatedAt: transferredAt,
+      transferHistory: arrayUnion({
+        oldJuniorPartnerId: oldJuniorPartnerId || null,
+        newJuniorPartnerId,
+        oldBranchId: oldBranchId || null,
+        newBranchId,
+        transferredAt
+      })
+    };
+
+    if (oldBranchId && oldBranchId !== newBranchId && oldBranchId !== 'unassigned') {
+      updates.pastBranchIds = arrayUnion(oldBranchId);
+    }
+
+    await updateDoc(docRef, updates);
+    
+    ActivityLogsService.logActivity(
+      'UPDATE', 
+      'Customer', 
+      customerId, 
+      `Transferred customer to a new junior partner`, 
+      performedBy,
+      newBranchId
+    );
+    this.clearCache();
+  }
+  */
+
+  /* FEATURE: HARD DELETE CUSTOMER WITHIN 30 DAYS (DISABLED) - UNCOMMENT TO RE-ENABLE
+  static async hardDeleteCustomer(customerId: string, adminId: string): Promise<void> {
+    const docRef = doc(COLLECTIONS.CUSTOMERS, customerId);
+    const cSnap = await getDoc(docRef);
+    
+    if (!cSnap.exists()) {
+      throw new Error("Customer not found");
+    }
+
+    const c = cSnap.data() as Customer;
+
+    // Enforce 30-day limit
+    const baseDate = c.trialConvertedAt || c.createdAt;
+    const limitMs = 30 * 24 * 60 * 60 * 1000;
+    if (Date.now() - baseDate > limitMs) {
+      throw new Error("Cannot delete customer records older than 30 days.");
+    }
+
+    // Enforce no family restriction
+    const family = await FamilyService.getFamilyForCustomer(customerId);
+    if (family) {
+      throw new Error("Cannot delete a customer who is part of a Family Account. Please detach or delete the family members first.");
+    }
+
+    // Void all transactions (Payments & Consumptions)
+    await LedgerService.voidAllCustomerTransactions(customerId, adminId);
+
+    // Hard delete the customer
+    await deleteDoc(docRef);
+    
+    ActivityLogsService.logActivity(
+      'DELETE',
+      'Customer',
+      customerId,
+      `Permanently deleted customer ${c.name} and voided all associated ledgers`,
+      adminId,
+      c.branchId
+    );
+    this.clearCache();
+  }
+  */
 
   static async softDeleteCustomer(id: string, performedBy: string, branchId?: string): Promise<void> {
     const docRef = doc(COLLECTIONS.CUSTOMERS, id);

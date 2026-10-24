@@ -117,14 +117,10 @@ function AnalyticsPageContent() {
       
       let filteredConsumptions = allMonthConsumptions.filter((c: any) => !c.isTransfer);
 
-      // If junior partner, filter to ONLY show consumptions by their assigned customers just for fun
+      // If junior partner, filter to ONLY show consumptions explicitly stamped for this JP
       if (role === 'junior_partner' && user) {
-        // We need to know which customers belong to this JP. Pass null to get all active customers for this JP globally.
-        const myCustomers = await CustomerService.getActiveCustomers(null);
-        const myCustomerIds = myCustomers.filter(c => c.createdBy === user.uid || c.juniorPartnerId === user.uid).map(c => c.id);
-        
         filteredConsumptions = filteredConsumptions.filter((c: any) => 
-          myCustomerIds.includes(c.customerId) || c.createdBy === user.uid || c.juniorPartnerId === user.uid
+          c.juniorPartnerId === user.uid || (!c.juniorPartnerId && c.createdBy === user.uid)
         );
       }
 
